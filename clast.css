@@ -291,11 +291,11 @@ img.disab {
 }
 
 img.activ {
-  background-color: #d89800;
+  background-color: #50e0b0;
 }
 
 img.stay-activ {
-  background-color: #ffd060;
+  background-color: #40c030;
 }
 
 img.off {
@@ -524,9 +524,9 @@ div.disab {
   background-image: url('images/check-disab.png');
 }
 
-/* NOTE: the name of the focal activity is displayed to the right of
+/* NOTE: the name of the focal cluster is displayed to the right of
          the top bar buttons */
-#focal-activity {
+#focal-cluster {
   display: inline-block;
   margin-left: 50px;
   max-height: 32px;
@@ -674,68 +674,10 @@ div.dragger {
   height: 70px;
 }
 
-/* styles for the ADD Activity dialog */
-#add-activity-dlg {
+/* styles for the ADD Node dialog */
+#add-node-dlg {
   width: 270px;
   height: 70px;
-}
-
-/* styles for the ADD Aspect dialog */
-#add-aspect-dlg {
-  width: 314px;
-  height: 46px;
-}
-
-#add-aspect-from {
-  display: inline-block;
-  font-weight: normal;
-  vertical-align: bottom;
-  max-width: 138px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-#add-aspect-name-lbl {
-  position: absolute;
-  top: 26px;
-  left: 3px;
-}
-
-#add-aspect-name {
-  position: absolute;
-  top: 24px;
-  left: 41px;
-  width: 248px;
-}
-
-/* styles for the ASPECT dialog */
-#aspect-dlg {
-  width: 276px;
-  height: 46px;
-}
-
-#aspect-lbl {
-  display: inline-block;
-  font-weight: normal;
-  vertical-align: bottom;
-  max-width: 160px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-#aspect-name {
-  position: absolute;
-  top: 24px;
-  left: 2px;
-  width: 240px;
-}
-
-#aspect-x-btn {
-  position: absolute;
-  top: 23px;
-  right: 3px;
-  width: 20px;
-  height: 20px;
 }
 
 /* LOAD modal dialog */
@@ -1431,113 +1373,21 @@ img.finder {
   box-shadow: inset #f0c0a0 0 0 11px 2px; 
 }
 
-#monitor-msg,
-#monitor-vbl,
-#monitor-eqs,
-#monitor-trc {
+#monitor-msg {
   margin: 2px;
   padding-top: 3px;
   width: calc(100% - 5px);
-  height: calc(100% - 64px);
+  height: calc(100% - 45px);
   font: 12px monospace;
   border: 1px solid Black;
-}
-
-#monitor-blocks {
-  position: absolute;
-  bottom: 4px;
-  left: 2px;
 }
 
 #monitor-timer {
   position: absolute;
   bottom: 4px;
-  left: 64px;
+  right: 20px;
   min-width: 43px;
   text-align: right;
-}
-
-#monitor-progress {
-  position: absolute;
-  bottom: 4px;
-  left: 110px;
-  height: 10px;
-  border: 1px solid #dadada;
-  border-radius: 5px;
-  width: calc(100% - 140px);
-}
-
-#monitor-progress-bar {
-  height: 100%;
-  width: 0%;
-  box-shadow: inset 0 0 5px 0px #006000;
-  border-radius: 5px;
-}
-
-div.progress-block {
-  background-color: rgba(0, 224, 0, 0.55);
-  height: 9px;
-  display: inline-block;
-  vertical-align: top;
-  margin-top: 0.5px;
-  cursor: pointer;
-}
-
-div.progress-block:hover {
-  box-shadow: inset 0 0 0 1.8px #404040;
-}
-
-div.progress-block:first-child {
-  border-radius: 5px 0 0 5px;
-}
-
-div.progress-block:last-child {
-  border-radius: 0 5px 5px 0;
-}
-
-div.progress-block:first-child:last-child {
-  border-radius: 5px;
-}
-
-div.even-pb {
-  filter: brightness(120%);
-}
-
-div.sel-pb {
-  filter: saturate(15%) brightness(50%) contrast(150%);
-}
-
-div.error-pb {
-  background-color: rgba(210, 0, 0, 0.7);
-  min-width: 1%;
-}
-
-/* tab panes */
-/* NOTE: tabs appear "button style" to look the same across browsers */
-div.tabs {
-  margin: 3px 2px -1px 2px;
-}
-
-div.tab {
-  color: gray;
-  border: 1px solid gray;
-  border-radius: 4px;
-  display: inline-block;
-  padding-left: 2px;
-  padding-right: 2px;
-  margin-bottom: 2px;
-  cursor: pointer;
-}
-
-div.tab:hover {
-  background-color: #fefafc;
-}
-
-div.sel-tab {
-  color: Black;
-  background-color: white;
-  border: 1px solid Black;
-  box-shadow: inset #bfc0e2 0 0 7px 2px; 
 }
 
 #call-stack-dlg {

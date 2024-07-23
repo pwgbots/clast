@@ -121,25 +121,24 @@ SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
     }
     
     function initializeCLAST() {
-      // Protect user from unintentionally closing the browser
+      // Protect user from unintentionally closing the browser.
       window.onbeforeunload = () => { return 'Exit CLAST?'; };
-      // NOTE: first create UI and Documentation Manager to report messages
-      UI = new GUIController();
+      // NOTE: First create Controller and Documentation Manager to
+      // report messages.
+      UI = new Controller();
       UI.addListeners();
       DOCUMENTATION_MANAGER = new DocumentationManager();
-      // Create the virtual machine
+      // Create the Virtual Machine.
       VM = new VirtualMachine();
-      // Create the GUI-only objects
       UNDO_STACK = new UndoStack();
       ACTOR_MANAGER = new ActorManager();
       X_EDIT = new ExpressionEditor();
       FINDER = new Finder();
-      // NOTE: Instantiate the GUI classes, not their superclasses
-      FILE_MANAGER = new GUIFileManager();
-      MONITOR = new GUIMonitor();
-      // Initialize auto-saving function
+      FILE_MANAGER = new FileManager();
+      MONITOR = new Monitor();
+      // Initialize auto-saving function.
       AUTO_SAVE = new ModelAutoSaver();
-      // Create a new CLAST model
+      // Create a new CLAST model.
       UI.createNewModel();
     }
     
@@ -159,8 +158,8 @@ SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
            title="Change model settings (Alt-M)">
       <img id="save-btn" class="btn enab" src="images/save.png"
            title="Save model (Ctrl-S)">
-      <img id="actors-btn" class="btn enab" src="images/agents.png"
-           title="View agent list (Alt-A)">
+      <img id="actors-btn" class="btn enab" src="images/actors.png"
+           title="View actor list (Alt-A)">
       <img id="finder-btn" class="btn enab" src="images/find.png"
            title="Find model elements by their name (Ctrl-F)">
       <img id="savediagram-btn" class="btn enab" src="images/save-diagram.png"
@@ -170,12 +169,12 @@ SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
       <img id="documentation-btn" class="btn enab" src="images/info.png"
            title="View information and documentation (Ctrl-I)">
     </div>
-    <!-- if diagram is not the TOP activity, show a button to move up to its parent -->
-    <div id="focal-activity">
+    <!-- if diagram is not the TOP cluster, show a button to move up to its parent -->
+    <div id="focal-cluster">
       <img id="parent-btn" class="btn enab" src="images/parent.png"
-           title="View parent activity (Ctrl-U)">
+           title="View parent cluster (Ctrl-U)">
       <img id="lift-btn" class="btn disab" src="images/lift.png"
-           title="Move selection to parent activity">
+           title="Move selection to parent cluster">
       <div id="focal-name"></div>
     </div>
     <!-- solver host image -->
@@ -390,12 +389,13 @@ and move the cursor over the status bar">
   <!-- NOTE: the following hidden DIVs implement dialogs for the buttons on
        the side bar -->
 
-  <!-- the ADD ACTIVITY dialog prompts only for the activity name and (optionally)
-       the name of the agent "owning" it -->
-  <div id="add-activity-modal" class="modal">
-    <div id="add-activity-dlg" class="inp-dlg">
+  <!-- the ADD NODE dialog prompts only for the factor or cluster name and
+       (optionally) the name of the actor "owning" it -->
+  <div id="add-node-modal" class="modal">
+    <div id="add-node-dlg" class="inp-dlg">
       <div class="dlg-title">
-        <span id="add-activity-action">Add</span> function
+        <span id="add-node-action">Add</span>
+        <span id="add-node-type">factor</span>
         <img class="cancel-btn" src="images/cancel.png">
         <img class="ok-btn" src="images/ok.png">
       </div>
@@ -403,14 +403,14 @@ and move the cursor over the status bar">
         <tr>
           <td>Name:</td>
           <td>
-            <input id="add-activity-name" style="width:223px" type="text"
+            <input id="add-node-name" style="width:223px" type="text"
                    autocomplete="off">
           </td>
         </tr>
         <tr>
-          <td>Agent:</td>
+          <td>Actor:</td>
           <td>
-            <input id="add-activity-actor" style="width:223px" type="text"
+            <input id="add-node-actor" style="width:223px" type="text"
                    autocomplete="off" placeholder="(optional)">
           </td>
         </tr>
@@ -433,20 +433,19 @@ and move the cursor over the status bar">
     </div>
   </div>
 
-  <!-- The ADD ASPECT dialog allows adding an aspect to a link. -->
-  <div id="add-aspect-modal" class="modal">
-    <div id="add-aspect-dlg" class="inp-dlg">
+  <!-- The ADD LINK dialog allows editing the multiplier on a link. -->
+  <div id="add-link-modal" class="modal">
+    <div id="add-link-dlg" class="inp-dlg">
       <div class="dlg-title">
-        Add aspect to scope of
-        <div id="add-aspect-from"></div>
+        Multiplier for
+        <div id="add-link-name"></div>
         <img class="cancel-btn" src="images/cancel.png">
         <img class="ok-btn" src="images/ok.png">
       </div>
-      <div id="add-aspect-name-lbl">Name:</div>
-      <input id="add-aspect-name" type="text" autocomplete="off">
-      <img id="add-aspect-insert" src="images/aspect.png" class="sbtn enab">
-      <div id="add-aspect-list">
-      </div>
+      <div id="add-link-multiplier-lbl">Multiplier:</div>
+      <input id="add-link-multiplier" type="text"
+             placeholder="(1 for +, -1 for -, etc.)" autocomplete="off">
+      <img id="add-link-edit" src="images/edit.png" class="sbtn enab">
     </div>
   </div>
   
@@ -459,9 +458,8 @@ and move the cursor over the status bar">
         <img class="ok-btn" src="images/ok.png">
       </div>
       <div style="font-size: 11px; margin: 2px">
-        Prefix + agent should result in unique new names
-        for selected functions and system aspects.<br>
-        <em>Aspects will NOT be cloned unless a prefix is specified.</em>
+        Prefix + actor should result in unique new names
+        for selected factors and clusters.
       </div>
       <table style="width: 100%">
         <tr>
@@ -471,7 +469,7 @@ and move the cursor over the status bar">
           </td>
         </tr>
         <tr>
-          <td>Agent:</td>
+          <td>Actor:</td>
           <td>        
             <input id="clone-actor" type="text" autocomplete="off">
           </td>
@@ -480,24 +478,24 @@ and move the cursor over the status bar">
       <div>
         <div id="clone-renumbering" class="box clear"></div>
         <div style="display:inline-block; vertical-align:top; margin-top:3px"
-             title="NOTE: This applies only to selected activities and CORPITs">
+             title="NOTE: This applies only to selected factors">
           Use incremental numbering where possible
         </div>
       </div>
     </div>
   </div>  
 
-  <!-- The MOVE modal asks to confirm to move node to focal activity -->
+  <!-- The MOVE modal asks to confirm to move node to focal cluster -->
   <div id="move-modal" class="modal">
     <div id="move-dlg" class="inp-dlg">
       <div class="dlg-title" style="background-color: #cc88b0">
         Confirm move
       </div>
       <div id="move-msg">
-        Really move function
-        <em><span id="move-activity-name"></span></em>
-        from function <strong><span id="move-from-parent"></span></strong>
-        to this function <strong><span id="move-to-parent"></span></strong>?
+        Really move factor
+        <em><span id="move-factor-name"></span></em>
+        from cluster <strong><span id="move-from-parent"></span></strong>
+        to this cluster <strong><span id="move-to-parent"></span></strong>?
       </div>
       <div id="move-buttons">
         <img class="ok-btn" src="images/ok.png">
@@ -511,7 +509,7 @@ and move the cursor over the status bar">
   <!-- ACTORS dialog -->
   <div id="actors-modal" class="modal">
     <div id="actors-dlg" class="inp-dlg">
-      <div class="dlg-title">Agents
+      <div class="dlg-title">Actors
         <img class="cancel-btn" src="images/cancel.png">
         <img class="ok-btn" src="images/ok.png">
       </div>
@@ -525,7 +523,7 @@ and move the cursor over the status bar">
   <!-- ACTOR dialog -->
   <div id="actor-modal" class="modal">
     <div id="actor-dlg" class="inp-dlg">
-      <div class="dlg-title">Modify agent
+      <div class="dlg-title">Modify actor
         <img class="cancel-btn" src="images/cancel.png">
         <img class="ok-btn" src="images/ok.png">
       </div>
@@ -539,24 +537,17 @@ and move the cursor over the status bar">
   <!-- EXPRESSION EDITOR dialog -->
   <div id="expression-modal" class="modal">
     <div id="expression-dlg" class="inp-dlg">
-      <div class="dlg-title">Edit <span id="expression-type">system aspect</span>
-        <div id="expression-scope"></div>
+      <div class="dlg-title">Edit <span id="expression-type">factor</span>
+        <span id="expression-variable"></span>
         <img class="cancel-btn" src="images/cancel.png">
         <img class="ok-btn" src="images/ok.png">
         <img class="info-btn" src="images/info.png">
       </div>
-      <div id="expression-aspect-div">
-        <label for="expression-aspect">Name:</label>
-        <input id="expression-aspect" type="text" autocomplete="off">
-      </div>
-      <div id="expression-incoming-div">Expression for
-        <span id="expression-incoming-aspect"></span> of function
-        <span id="expression-activity"></span>
-      </div>
       <textarea id="expression-text" autocomplete="off" autocorrect="off"
                 autocapitalize="off" spellcheck="false"></textarea>
       <div id="expression-status">&nbsp;</div>
-      <img id="expression-insert" src="images/aspect.png" class="sbtn enab">
+      <img id="expression-insert-factor" src="images/factor.png" class="sbtn enab">
+      <img id="expression-insert-link" src="images/link.png" class="sbtn enab">
       <div id="expression-variables">
       </div>
       <div id="expression-help">
@@ -578,8 +569,8 @@ Pattern is sensitive to upper and lower case.
 Start pattern with . to match with first part of a name.
 Start pattern with = for an exact match. 
 Limit search by starting with a type selector X?
-where X can be one or several of these letters: AFLS
-(Agent, Function, Link or System aspect.">
+where X can be one or several of these letters: ACFL
+(Actor, Cluster, Factor or Link.">
     </div>
     <div id="finder-scroll-area">
       <table id="finder-table">
@@ -607,31 +598,10 @@ where X can be one or several of these letters: AFLS
     <div id="monitor-hdr" class="dragger dlg-title">Solver monitor
       <img id="monitor-close-btn" class="close-btn" src="images/close.png">
     </div>
-    <div id="monitor-tabs" class="tabs">
-      <div id="monitor-msg-tab" class="tab sel-tab"
-           title="Any text output from the MILP solver">
-        Messages
-      </div>
-      <div id="monitor-vbl-tab" class="tab"
-           title="Legend to variables (numbers are column indices in Simplex tableau)">
-        Variables
-      </div>
-      <div id="monitor-eqs-tab" class="tab"
-           title="Equations of the MILP problem submitted to the solver">
-        Equations
-      </div>
-    </div>
     <textarea id="monitor-msg" autocomplete="off" autocorrect="off"
         autocapitalize="off" spellcheck="false" hidden="hidden"></textarea>
-    <textarea id="monitor-vbl" autocomplete="off" autocorrect="off"
-        autocapitalize="off" spellcheck="false" hidden="hidden"></textarea>
-    <textarea id="monitor-eqs" autocomplete="off" autocorrect="off"
-        autocapitalize="off" spellcheck="false" hidden="hidden"></textarea>
-    <div id="monitor-blocks">1/1</div>
+    <div id="monitor-ticks">1/1</div>
     <div id="monitor-timer">00:00</div>
-    <div id="monitor-progress">
-      <div id="monitor-progress-bar"></div>
-    </div>
     <div id="monitor-resize" class="resizer"></div>
   </div>
   
@@ -697,14 +667,14 @@ where X can be one or several of these letters: AFLS
       <div id="paste-fta" class="paste-option">
         <div id="paste-fta-box" class="box checked"></div>
         <div class="paste-tactic">
-          Change agent <span id="paste-from-actor"></span>
+          Change actor <span id="paste-from-actor"></span>
           to <span id="paste-to-actor"></span>
         </div>
       </div>
       <div class="paste-option">
         <div id="paste-a-box" class="box checked"></div>
         <div class="paste-tactic">
-          <label>If no agent, add:</label>
+          <label>If no actor, add:</label>
           <input id="paste-actor" type="text"
                  placeholder="(no actor)" autocomplete="off">
         </div>
@@ -728,19 +698,19 @@ where X can be one or several of these letters: AFLS
     </div>
   </div>  
 
-  <!-- Pop-up twin list for linking to sub-activities -->
-  <div id="sub-activities-modal" class="modal">
-    <div id="sub-activities-list">
-      <div id="sub-activities-from">
-        <div id="sub-activities-from-lbl">From &#x24C4; of:</div>
-        <div id="sub-activities-from-sa">
-          <table id="sub-activities-from-table"></table>
+  <!-- Pop-up twin list for linking to factors within a cluster -->
+  <div id="sub-factors-modal" class="modal">
+    <div id="sub-factors-list">
+      <div id="sub-factors-from">
+        <div id="sub-factors-from-lbl">From:</div>
+        <div id="sub-factors-from-sf">
+          <table id="sub-factors-from-table"></table>
         </div>
       </div>
-      <div id="sub-activities-to">
-        <div id="sub-activities-to-lbl">To</div>
-        <div id="sub-activities-to-sa">
-          <table id="sub-activities-to-table"></table>
+      <div id="sub-factors-to">
+        <div id="sub-factors-to-lbl">To</div>
+        <div id="sub-factors-to-sf">
+          <table id="sub-factors-to-table"></table>
         </div>
       </div>
     </div>
