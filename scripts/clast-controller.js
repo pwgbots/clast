@@ -1619,6 +1619,7 @@ class Controller {
       const obj = fc.factor_positions[i].factor.setPositionInFocalCluster();
       if(obj.factor.containsPoint(this.mouse_x, this.mouse_y)) {
         this.on_node = obj.factor;
+        this.on_factor = obj.factor;
         break;
       }
     }
@@ -1628,6 +1629,7 @@ class Controller {
       // it is being dragged over will be detected instead.
       if(obj != this.dragged_node &&
           obj.containsPoint(this.mouse_x, this.mouse_y)) {
+        this.on_node = obj.factor;
         this.on_cluster = obj;
         break;
       }
@@ -1799,6 +1801,7 @@ class Controller {
     // Cursor on node => start moving.
     } else if(this.on_node) {
       this.dragged_node = this.on_node;
+console.log('HERE on node', this.on_node.displayName);
       this.move_dx = this.mouse_x - this.on_node.x;
       this.move_dy = this.mouse_y - this.on_node.y;
       // NOTE: Do not select when already in selection.
@@ -1838,7 +1841,8 @@ class Controller {
       if(brx - tlx > 2 && bry - tly > 2) {
         const ol = [], fc = MODEL.focal_cluster;
         for(let i = 0; i < fc.factor_positions.length; i++) {
-          const obj = fc.factor_positions[i].factor.setPositionInCluster();
+          const obj = fc.factor_positions[i]
+              .factor.setPositionInFocalCluster();
           if(obj.x >= tlx && obj.x <= brx && obj.y >= tly && obj.y < bry) {
             ol.push(obj);
           }
@@ -1919,20 +1923,32 @@ class Controller {
   }
   
   dragOver(e) {
-    // Accept factors that are dragged from the Finder and are not
-    // in the focal cluster.
+    // Accept factors and clusters that are dragged from the Finder
+    // if they are not already in the focal cluster.
     this.updateCursorPosition(e);
-    const f = MODEL.factors[e.dataTransfer.getData('text')];
+    const
+        id = e.dataTransfer.getData('text'),
+        f = MODEL.factors[id];
     if(f && MODEL.focal_cluster.indexOfFactor(f) < 0) e.preventDefault();
+    const c = MODEL.clusters[id];
+    if(c && MODEL.focal_cluster.sub_clusters.indexOf(f) < 0) e.preventDefault();
   }
 
   drop(e) {
     // Prompt to move the factor that is being dragged from the Finder
     // to the focal cluster at the cursor position.
-    const f = MODEL.factors[e.dataTransfer.getData('text')];
+    const
+        id = e.dataTransfer.getData('text'),
+        f = MODEL.factors[id];
     if(f && MODEL.focal_cluster.indexOfFactor(f) < 0) {
       e.preventDefault();
-      this.confirmToMoveFactor(f);
+      MODEL.addFactorPosition(f, this.add_x, this.add_y);
+    } else {
+      const c = MODEL.clusters[id];
+      if(c && MODEL.focal_cluster.sub_clusters.indexOf(c) < 0) {
+        e.preventDefault();
+        this.confirmToMoveCluster(c);
+      }
     }
     // NOTE: Update afterwards, as the modeler may target a precise (X, Y).
     this.updateCursorPosition(e);
@@ -2398,28 +2414,40 @@ class Controller {
         n.resize();
         UNDO_STACK.push('add', n); 
       }
-    } else if(type === 'cluster') {
-      console.log('ADD cluster');
-    } else if(type === 'factor') {
-      this.dbl_clicked_node = null;
+    } else {
       md = this.modals['add-node'];
+      this.dbl_clicked_node = null;
       if(md.element('action').innerText === 'Edit') {
         if(this.updateNodeProperties()) md.hide();
         return;
       }
-      nn = md.element('name').value;
-      an = md.element('actor').value;
+      nn = md.element('name').value.trim();
+      an = md.element('actor').value.trim();
       if(!this.validNames(nn, an)) {
         UNDO_STACK.pop();
         return false;
       }
-      n = MODEL.addFactor(nn, an);
+      type = md.element('type').innerText;
+      if(type === 'factor') {
+        const
+            full_name = nn + (an ? ` (${an})` : UI.NO_ACTOR),
+            pf = MODEL.objectByName(full_name);
+        n = MODEL.addFactor(nn, an);
+        if(n) {
+          if(pf) {
+            this.notify(`Added existing factor <em>${pf.displayName}</em>`);
+          }
+          MODEL.focal_cluster.addFactorPosition(n, this.add_x, this.add_y);
+        }
+      } else {
+        n = MODEL.addCluster(nn, an);
+      }
       if(n) {
-        // If factor, and X and Y are set, it exists; then if not in the
+        // If cluster, and X and Y are set, it exists; then if not in the
         // focal cluster, ask whether to move it there.
-        if(n instanceof Factor && (n.x !== 0 || n.y !== 0)) {
+        if(n instanceof Cluster && (n.x !== 0 || n.y !== 0)) {
           if(n.parent !== MODEL.focal_cluster) {
-            this.confirmToMoveFactor(n);
+            this.confirmToMoveCluster(n);
           } else {
             this.warningEntityExists(n);
           }
@@ -2908,7 +2936,6 @@ console.log('HERE name conflicts', name_conflicts, mapping);
     }
     
     // No conflicts => add all.
-    MODEL.orphan_list.length = 0;
     for(let i = 0; i < extras_node.childNodes.length; i++) {
       addEntityFromNode(extras_node.childNodes[i]);
     }
@@ -2918,7 +2945,6 @@ console.log('HERE name conflicts', name_conflicts, mapping);
     for(let i = 0; i < entities_node.childNodes.length; i++) {
       addEntityFromNode(entities_node.childNodes[i]);
     }
-    MODEL.rescueOrphans();
     // Update diagram, showing newly added nodes as selection.
     MODEL.clearSelection();
     for(let i = 0; i < selection_node.childNodes.length; i++) {
@@ -3025,7 +3051,7 @@ console.log('HERE name conflicts', name_conflicts, mapping);
     return true;
   }
 
-  cancelAddCluster() {
+  cancelAddNode() {
     // Not only hides the node modal, but also clears the edited object.
     this.modals['add-node'].hide();
     this.edited_object = false;    

@@ -54,7 +54,7 @@ class ActorManager {
     this.actor_data = {};
     for(let k in MODEL.actors) if(MODEL.actors.hasOwnProperty(k)) {
       const a = MODEL.actors[k];
-      this.actor_data[k] = {name: a.name, color: a.color, lc: a.leafCount};
+      this.actor_data[k] = {name: a.name, color: a.color, lc: a.factorCount};
     }
     this.updateDialog();
     UI.modals.actors.show();

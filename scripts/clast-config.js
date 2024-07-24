@@ -46,8 +46,9 @@ const CONFIGURATION = {
     // is passed to the solver. On faster machines, the value of this constant
     // can be increased
     progress_needle_interval: 100,
-    // Allow some control over the size of a cluster hexagon
-    min_cluster_size: 80,
+    // Allow some control over the size of nodes.
+    min_factor_width: 80,
+    min_cluster_width: 80,
   };
 
 // NOTE: Debugging is defined as a global *variable* to permit setting it
