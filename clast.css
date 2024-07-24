@@ -895,11 +895,11 @@ img.inline-cancel-btn {
 #docu-container {
   margin: 2px;
   width: calc(100% - 4px);
-  height: calc(100% - 45px);
+  height: calc(100% - 30px);
 }
 
 #docu-viewer {
-  height: (100% - 15px);
+  height: calc(100% - 15px);
   overflow-y: auto;
   font-family: serif;
   font-size: 12pt;
@@ -1016,8 +1016,8 @@ img.inline-cancel-btn {
 }
 
 #expression-dlg {
-  width: 565px;
-  height: 310px;
+  width: 570px;
+  height: 280px;
 }
 
 #expression-scope {
@@ -1033,9 +1033,9 @@ img.inline-cancel-btn {
 
 #expression-text {
   position: absolute;
-  top: 45px;
+  top: 23px;
   left: 2px;  width: calc(100% - 4.5px);
-  height: calc(100% - 72px);
+  height: calc(100% - 49px);
   font: 12px monospace;
   overflow-y: hidden;
 }
@@ -1067,9 +1067,8 @@ img.inline-cancel-btn {
   font-family: monospace;
 }
 
-#add-aspect-list,
-#sub-activities-from,
-#sub-activities-to,
+#sub-factors-from,
+#sub-factors-to,
 #expression-variables {
   position: absolute;
   left: calc(100% - 20px);
@@ -1083,35 +1082,38 @@ img.inline-cancel-btn {
   border-radius: 3px;
 }
 
-#add-aspect-list > table,
+#expression-variables {
+  left: calc(100% - 40px);
+  bottom: 19px;
+}
+
 #expression-variables > table {
   width: 100%;
   border-collapse: collapse;
 }
 
-#sub-activities-from-table,
-#sub-activities-to-table {
+#sub-factors-from-table,
+#sub-factors-to-table {
   width: 100%;
   pointer-events: all;
 }
 
-#sub-activities-from-table > tbody > tr > td,
-#sub-activities-to-table > tbody > tr > td,
-#add-aspect-list > table > tbody > tr > td,
+#sub-factors-from-table > tbody > tr > td,
+#sub-factors-to-table > tbody > tr > td,
 #expression-variables > table > tbody > tr > td {
   height: 16px;
 }
 
-#sub-activities-modal {
+#sub-factors-modal {
   background-color: rgba(0, 64, 128, 0.05) !important;
 }
 
-#sub-activities-list {
+#sub-factors-list {
   position: absolute;
 }
 
-#sub-activities-from,
-#sub-activities-to {
+#sub-factors-from,
+#sub-factors-to {
   position: relative;
   left: auto;
   bottom: auto;
@@ -1120,13 +1122,18 @@ img.inline-cancel-btn {
   overflow: scroll;
 }
 
-#sub-activities-from-lbl,
-#sub-activities-to-lbl {
+#sub-factors-from-lbl,
+#sub-factors-to-lbl {
   font-weight: bold;
 }
 
-#add-aspect-insert,
-#expression-insert {
+#expression-insert-factor {
+  position: absolute;
+  right: 18px;
+  bottom: 3px;
+}
+
+#expression-insert-link {
   position: absolute;
   right: 1px;
   bottom: 3px;
@@ -1136,7 +1143,7 @@ img.inline-cancel-btn {
   position: absolute;
   border: solid 1px #e2d8e8;
   bottom: 0;
-  width: calc(100% - 30px);
+  width: calc(100% - 50px);
   margin: 2px;
   padding: 2px;
 }

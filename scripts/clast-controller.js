@@ -176,8 +176,9 @@ class Controller {
     this.target_cluster = null;
     this.link_under_cursor = null;
     this.deep_link_info = '';
-    this.from_factor = null;
-    this.to_factor = null;
+    // When linking, keep track of the FROM and TO nodes.
+    this.from_node = null;
+    this.to_node = null;
     this.last_up_down_without_move = Date.now();
     // Keyboard shortcuts: Ctrl-x associates with menu button ID.
     this.shortcuts = {
@@ -202,7 +203,7 @@ class Controller {
     };
 
     // Initialize controller buttons.
-    this.node_btns = ['factor', 'cluster', 'note'];
+    this.node_btns = ['factor', 'cluster', 'link', 'note'];
     this.edit_btns = ['clone', 'paste', 'delete', 'undo', 'redo'];
     this.model_btns = ['settings', 'save', 'savediagram', 'finder',
         'actors', 'monitor', 'solve'];
@@ -564,7 +565,6 @@ class Controller {
     // Redraw model in the browser (GUI only).
     MODEL.clearSelection();
     this.clearStatusLine();
-    this.drawDiagram(MODEL);
     MODEL.t = 0;
     UI.updateTimeStep();
   }
@@ -778,7 +778,7 @@ class Controller {
           } else if(event.target.nodeName === 'TD') {
             // This can only occur when a sub-factor name is clicked.
             const ds = event.target.dataset;
-            UI.connectSubFactor(ds.ft, ds.id); 
+            UI.connectFactor(ds.ft, ds.id); 
           }
         });
     
@@ -853,7 +853,7 @@ class Controller {
     return loaded;
   }
   
-  makeFocalCluster(a) {
+  makeFocalCluster(c) {
     const fc = MODEL.focal_cluster;
     MODEL.focal_cluster = c;
     MODEL.clearSelection(false);
@@ -1026,7 +1026,7 @@ class Controller {
         dt = now - this.last_up_down_without_move;
     this.last_up_down_without_move = now;
     // Consider click to be "double" if it occurred less than 300 ms ago
-    if(dt < 300) {
+    if(dt < 400) {
       this.last_up_down_without_move = 0;
       return true;
     }
@@ -1276,35 +1276,51 @@ class Controller {
   
   nodeRim(fr) {
     let rim = fr,
-        node = MODEL.nodeByID(rim.dataset.id);
-    rim.onmouseover = connectorMouseOver;
-    rim.onmouseout = connectorMouseOut;
-    rim.onmousedown = connectorMouseDown;
+        node = MODEL.objectByID(rim.dataset.id);
+    rim.onmouseover = rimMouseOver;
+    rim.onmouseout = rimMouseOut;
+    rim.onmousedown = rimMouseDown;
 
     function rimMouseOver() {
+      // Do not respond when linkins is not enabled.
+      if(!UI.canLink()) return;
       // Do not respond when connecting from the same node, or from a
-      // cluster containing no factors.
+      // cluster containing no factors, or when a link between the nodes
+      // exists (in either direction).
       if(node === UI.from_node ||
-        (node instanceof Cluster && !node.factor_positions.length)) {
-          UI.to_node = null;
+          (node instanceof Cluster && !node.factor_positions.length) ||
+          MODEL.areLinked(UI.from_node, node)) {
+        UI.to_node = null;
           rim.style.cursor = 'not-allowed';
       } else {
         rim.style.cursor = 'crosshair';
-        rim.style.strokeWidth = 2.5;
-        rim.style.stroke = (node === UI.from_node ? 'Blue' : UI.color.active_rim);
+        if(node === UI.from_node) {
+          // Highlight node in blue when connecting *from* this node.
+          rim.style.stroke = UI.color.from_rim;
+        } else {
+          // Otherwise, highlight in "connecting" blue.
+          rim.style.stroke = UI.color.to_rim;
+          UI.to_node = node;
+        }
       }
+      UI.deep_link_info = node.displayName;
     }
 
     function rimMouseOut() {
-      // De-highlight node rim.
-      rim.style.stroke = UI.color.rim;
-      con.style.strokeWidth = 1;
-      UI.to_node = null;
+      // Do not respond when linkins is not enabled.
+      if(!UI.canLink()) return;
+      // De-highlight node rim unless connecting from this node.
+      if(node !== UI.from_node) {
+        rim.style.stroke = UI.color.transparent;
+        UI.to_node = null;
+      }
       UI.deep_link_info = '';
-      con.style.cursor = 'default';
+      rim.style.cursor = 'default';
     }
 
     function rimMouseDown(e) {
+      // Do not respond when linkins is not enabled.
+      if(!UI.canLink()) return;
       e = e || window.event;
       e.preventDefault();
       e.stopPropagation();
@@ -1313,8 +1329,10 @@ class Controller {
       if(node instanceof Factor ||
           (node instanceof Cluster && node.factor_positions.length)) {
         UI.from_node = node;
+        UI.to_node = null;
         document.onmouseup = stopMakeConnection;
         document.onmousemove = makeConnection;
+        rim.style.stroke = UI.color.from_rim;
       } else {
         UI.from_node = null;
         UI.to_node = null;
@@ -1329,9 +1347,9 @@ class Controller {
       // TO point is the cursor position...
       let tp = {x: UI.mouse_x, y: UI.mouse_y};
       // ... unless the cursor is over a suitable node.
-      if(UI.to_node) {
-        tp = UI.to_node.connectionPoint(UI.from_node);
-      }
+      let tn = UI.to_node;
+      if(tn instanceof Factor) tn.setPositionInFocalCluster();
+      if(tn) tp = tn.connectionPoint(UI.from_node);
       const fp = UI.from_node.connectionPoint(tp);
       UI.paper.dragLineToCursor(fp, tp);
     }
@@ -1353,19 +1371,21 @@ class Controller {
           tsub: [] 
         };
       if(ctm.fnode instanceof Cluster) {
-        ctm.fsub = ctm.fnode.subFactors;
+        ctm.fsub = ctm.fnode.allFactors;
+        ctm.ffact = ctm.fnode;
       } else {
         ctm.ffact = ctm.fnode;
       }
       if(ctm.tnode instanceof Cluster) {
-        ctm.tsub = ctm.tnode.subFactors;
+        ctm.tsub = ctm.tnode.allFactors;
+        ctm.tfact = ctm.tnode;
       } else {
         ctm.tfact = ctm.tnode;
       }
       UI.connection_to_make = ctm;
       if(ctm.fsub.length || ctm.tsub.length) {
         // Prompt modeler to specify which sub-factor to link from/to.
-        UI.promptForSubFactors();
+        UI.promptForFactors();
       } else {
         // Complete, or abort when FROM/TO data is incomplete.
         UI.completeConnection();
@@ -1400,11 +1420,11 @@ class Controller {
     }
     // Terminate the connection process.
     this.connection_to_make = null;
-    this.from_factor = null;
-    this.to_factor = null;
+    this.from_node = null;
+    this.to_node = null;
   }
   
-  subFactorTable(sub, from_to) {
+  factorTable(sub, from_to) {
     // Return HTML for table with sub-factor names.
     const
         names = [],
@@ -1421,7 +1441,7 @@ class Controller {
     return html.join('');
   }
 
-  promptForSubFactors() {
+  promptForFactors() {
     // Display list of sub-factors to choose from.
     // If none is selected (mouseout without click), no connection is made.
     const ctm = this.connection_to_make;
@@ -1437,21 +1457,21 @@ class Controller {
       tlbl.innerText = `To:`;
       if(ctm.fsub.length) {
         max = ctm.fsub.length;
-        ftbl.innerHTML = this.subFactorTable(ctm.fsub, 'from');
+        ftbl.innerHTML = this.factorTable(ctm.fsub, 'from');
         fe.style.display = 'inline-block';
       } else {
         fe.style.display = 'none';        
       }
       if(ctm.tsub.length) {
         max = Math.max(max, ctm.tsub.length);
-        ttbl.innerHTML = this.subFactorTable(ctm.tsub, 'to');
+        ttbl.innerHTML = this.factorTable(ctm.tsub, 'to');
         te.style.display = 'inline-block';
       } else {
         te.style.display = 'none';        
       }
       // Position the pop-up list.
       const
-          dx = ctm.tact.width / 2,
+          dx = ctm.tfact.width / 2,
           dy = 0,
           zf = this.paper.zoom_factor,
           // List height depends on highest number of sub-factors.
@@ -1464,7 +1484,7 @@ class Controller {
     }
   }
   
-  connectSubFactor(from_to, id) {
+  connectFactor(from_to, id) {
     // Connect to the selected sub-factor, or abort if not recognized.
     const
         ctm = this.connection_to_make,
@@ -1506,7 +1526,7 @@ class Controller {
   updateButtons() {
     // Updates the buttons on the main GUI toolbars
     const
-        node_btns = 'factor cluster note ',
+        node_btns = 'factor cluster link note ',
         edit_btns = 'clone paste delete undo redo ',
         model_btns = 'settings save savediagram finder monitor solve';
     if(MODEL === null) {
@@ -1565,7 +1585,7 @@ class Controller {
   
   get stayActiveButton() {
     // Return the button that is "stay active", or NULL if none 
-    const btns = ['factor', 'cluster', 'note'];
+    const btns = ['factor', 'cluster', 'link', 'note'];
     for(let i = 0; i < btns.length; i++) {
       const b = document.getElementById(btns[i] + '-btn');
       if(b.classList.contains('stay-activ')) return b;
@@ -1581,9 +1601,36 @@ class Controller {
       this.resetActiveButton();
     }
     if(other && (e.target.classList.contains('enab'))) {
-      e.target.classList.add((e.shiftKey ? 'stay-activ' : 'activ'));
-      this.active_button = e.target;
+      if(e.target === this.buttons.link) {
+        this.canLink(true);
+      } else{
+        e.target.classList.add(e.shiftKey ? 'stay-activ' : 'activ');
+        this.active_button = e.target;
+      }
     }
+    // Update the "linking" state.
+    this.canLink();
+  }
+  
+  canLink(toggle=false) {
+    // Return TRUE if the "link" button is active.
+    const lb = this.buttons.link;
+    let can = (this.active_button === lb);
+    if(toggle) {
+      can = !can;
+      this.resetActiveButton();
+      MODEL.clearSelection();
+      this.on_node = false;
+    }
+    if(can) {
+      lb.title = "Disable linking";
+      lb.classList.add('stay-activ');
+      this.active_button = lb;
+    } else {
+      lb.title = "Enable linking";
+      lb.classList.remove('stay-activ');
+    }
+    return can;
   }
 
   //
@@ -1599,7 +1646,8 @@ class Controller {
     this.mouse_x = cp[0];
     this.mouse_y = cp[1];
     document.getElementById('pos-x').innerHTML = 'X = ' + this.mouse_x;
-    document.getElementById('pos-y').innerHTML = 'Y = ' + this.mouse_y;    
+    document.getElementById('pos-y').innerHTML = 'Y = ' + this.mouse_y;
+    this.on_node = null;
     this.on_note = null;
     this.on_cluster = null;
     this.on_factor= null;
@@ -1615,22 +1663,25 @@ class Controller {
     
     //console.log(e);
     const fc = MODEL.focal_cluster;
+    if(fc.relatedLinks.indexOf(this.link_under_cursor) >= 0) {
+      this.on_link = this.link_under_cursor;
+    }
     for(let i = fc.factor_positions.length-1; i >= 0; i--) {
-      const obj = fc.factor_positions[i].factor.setPositionInFocalCluster();
-      if(obj.factor.containsPoint(this.mouse_x, this.mouse_y)) {
-        this.on_node = obj.factor;
-        this.on_factor = obj.factor;
+      const fp = fc.factor_positions[i].factor.setPositionInFocalCluster();
+      if(fp.factor.containsPoint(this.mouse_x, this.mouse_y)) {
+        this.on_node = fp.factor;
+        this.on_factor = fp.factor;
         break;
       }
     }
     for(let i = fc.sub_clusters.length-1; i >= 0; i--) {
-      const obj = fc.sub_clusters[i];
+      const c = fc.sub_clusters[i];
       // NOTE: Ignore cluster that is being dragged, so that a cluster
       // it is being dragged over will be detected instead.
-      if(obj != this.dragged_node &&
-          obj.containsPoint(this.mouse_x, this.mouse_y)) {
-        this.on_node = obj.factor;
-        this.on_cluster = obj;
+      if(c != this.dragged_node &&
+          c.containsPoint(this.mouse_x, this.mouse_y)) {
+        this.on_node = c;
+        this.on_cluster = c;
         break;
       }
     }
@@ -1748,7 +1799,6 @@ class Controller {
         (this.on_note && MODEL.selection.indexOf(this.on_note) >= 0) ||
         (this.on_link && MODEL.selection.indexOf(this.on_link) >= 0))) {
       MODEL.clearSelection();
-      UI.drawDiagram(MODEL);
     }
   
     // If one of the "add" sidebar buttons is active, prompt for new node.
@@ -1801,7 +1851,6 @@ class Controller {
     // Cursor on node => start moving.
     } else if(this.on_node) {
       this.dragged_node = this.on_node;
-console.log('HERE on node', this.on_node.displayName);
       this.move_dx = this.mouse_x - this.on_node.x;
       this.move_dy = this.mouse_y - this.on_node.y;
       // NOTE: Do not select when already in selection.
@@ -1839,24 +1888,32 @@ console.log('HERE on node', this.on_node.displayName);
       // If rectangle has size greater than 2x2 pixels, select all elements
       // having their center inside the selection rectangle.
       if(brx - tlx > 2 && bry - tly > 2) {
-        const ol = [], fc = MODEL.focal_cluster;
-        for(let i = 0; i < fc.factor_positions.length; i++) {
-          const obj = fc.factor_positions[i]
-              .factor.setPositionInFocalCluster();
-          if(obj.x >= tlx && obj.x <= brx && obj.y >= tly && obj.y < bry) {
-            ol.push(obj);
+        const
+            ol = [],
+            fc = MODEL.focal_cluster,
+            fpl = fc.factor_positions;
+        for(let i = 0; i < fpl.length; i++) {
+          const fp = fpl[i].factor.setPositionInFocalCluster();
+          if(fp.x >= tlx && fp.x <= brx && fp.y >= tly && fp.y < bry) {
+            ol.push(fp.factor);
+          }
+        }
+        for(let i = 0; i < fc.sub_clusters.length; i++) {
+          const c = fc.sub_clusters[i];
+          if(c.x >= tlx && c.x <= brx && c.y >= tly && c.y < bry) {
+            ol.push(c);
           }
         }
         for(let i = 0; i < fc.notes.length; i++) {
-          const obj = fc.notes[i];
-          if(obj.x >= tlx && obj.x <= brx && obj.y >= tly && obj.y < bry) {
-            ol.push(obj);
+          const n = fc.notes[i];
+          if(n.x >= tlx && n.x <= brx && n.y >= tly && n.y < bry) {
+            ol.push(n);
           }
         }
         for(let i in MODEL.links) if(MODEL.links.hasOwnProperty(i)) {
-          const obj = MODEL.links[i];
+          const l = MODEL.links[i];
           // Only add a link if both its nodes are selected as well.
-          if(obj.inList(ol)) ol.push(obj);
+          if(l.inList(ol)) ol.push(l);
         }
         // Having compiled the object list, actually select them.
         MODEL.selectList(ol);
@@ -1869,6 +1926,7 @@ console.log('HERE on node', this.on_node.displayName);
     // Then check whether the user is moving a node (possibly part of a
     // larger selection).
     } else if(this.dragged_node) {
+console.log('HERE dragged target', this.dragged_node, this.target_cluster, this.on_cluster);
       // Always perform the move operation (this will do nothing if the
       // cursor did not move).
       MODEL.moveSelection(
@@ -2043,6 +2101,9 @@ console.log('HERE on node', this.on_node.displayName);
       } else if(code === 'ArrowRight') {
         e.preventDefault();
         this.stepForward(e);
+      } else if(code === 'Insert') {
+        // Toggle the "linking" state.
+        this.canLink(true);
       } else if(e.ctrlKey && code === 'KeyS') {
         // Ctrl-S means: save model. Treat separately because Shift-key
         // alters the way in which the model file is saved.
@@ -3061,6 +3122,12 @@ console.log('HERE name conflicts', name_conflicts, mapping);
     // NOTE: The factor properties modal is the Expression Editor.
     this.edited_object = f;
     X_EDIT.editExpression(f);
+  }
+  
+  showLinkPropertiesDialog(l) {
+    // NOTE: The link properties modal is the Expression Editor.
+    this.edited_object = l;
+    X_EDIT.editExpression(l);
   }
   
 } // END of class Controller

@@ -685,12 +685,7 @@ class ExpressionParser {
         }
       } else {
         // Symbol does not start with a digit
-        const ax = this.incomingExpression(l);
-        if(ax) {
-          // NOTE: No offsets (yet) for incoming expression operands.
-          this.sym = [ax, 't',0, 't', 0];
-          this.is_static = this.is_static && ax.isStatic;
-        } else if(!this.error) {
+        if(!this.error) {
           i = ACTUAL_SYMBOLS.indexOf(l);
           if(i < 0) {
             this.error = `Invalid symbol "${v}"`;

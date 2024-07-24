@@ -49,8 +49,9 @@ class ExpressionEditor {
 <em>Move cursor over a</em> <code>symbol</code> <em>for explanation.</em>
 <p>
 <h4>Variables</h4>
-<p>Names of system aspects must be enclosed by brackets, e.g.,
-  <code>[some aspect]</code>, to distinguish them from pre-defined variables
+<p>Names of factors and links must be enclosed by brackets, e.g.,
+  <code>[xyz]</code> or <code>[a${UI.LINK_ARROW}b]</code>,
+  to distinguish them from pre-defined variables
   (<code title="Cycle number (starts at 1)">c</code>,
   <code title="Simulated clock time (in hours)">now</code>,
   <code title="A random number from the uniform distribution U(0, 1)">random</code>)
@@ -137,13 +138,12 @@ NOTE: Grouping groups results in a single group, e.g., (1;2);(3;4;5) evaluates a
         'click', () => X_EDIT.toggleExpressionInfo());
     // The "insert factor" button shows factors within scope (if any).
     this.insert_factor.addEventListener(
-        'mouseover', () => X_EDIT.showVariables('factor'));
+        'mouseover', (event) => X_EDIT.showVariables(event, 'factor'));
     // The "insert link" button shows links within scope (if any).
     this.insert_link.addEventListener(
-        'mouseover', () => X_EDIT.showVariables('link'));
-    // List with variables in scope disappears when cursor moves out.
+        'mouseover', (event) => X_EDIT.showVariables(event, 'link'));
     this.variables.addEventListener(
-        'mouseout', () => X_EDIT.hideVariables());
+        'mouseover', (event) => event.stopPropagation());
     // Ensure that list disappears when cursor moves into other controls.
     this.text.addEventListener(
         'mouseover', () => X_EDIT.hideVariables());
@@ -160,12 +160,13 @@ NOTE: Grouping groups results in a single group, e.g., (1;2);(3;4;5) evaluates a
     this.type.innerText = (obj instanceof Link ?
         'link multiplier' : 'factor');
     this.text.value = this.edited_expression.text.trim();
-    this.names = {factor: this.factorsInScope, links: this.linksInScope};
+    this.names = {factor: this.factorsInScope, link: this.linksInScope};
     this.in_scope = [];
     this.clearStatusBar();
     this.variables.style.display = 'none';
-    this.status.title = pluralS(names.factor.length + names.link.length,
-        'variable') + ` within scope of this ${obj.type.toLowerCase()}`;
+    this.status.title = pluralS(
+        this.names.factor.length + this.names.link.length, 'variable') +
+        ` within scope of this ${obj.type.toLowerCase()}`;
     UI.modals.expression.show('text');
   }
  
@@ -214,11 +215,13 @@ NOTE: Grouping groups results in a single group, e.g., (1;2);(3;4;5) evaluates a
   
   get factorsInScope() {
     // Returns a list of names of all factors within scope.
+    const o = this.edited_object;
+    if(o instanceof Link) return [o.from_factor];
     const
-        fis = this.edited_object.factorsInScope,
+        fis = o.inputs,
         list = [];
     for(let i = 0; i < fis.length; i++) {
-      list.push(fis[i].displayName);
+      list.push(fis[i].from_factor.displayName);
     }
     return list;
   }  
@@ -228,7 +231,7 @@ NOTE: Grouping groups results in a single group, e.g., (1;2);(3;4;5) evaluates a
     // NOTE: Links do not have other links in scope.
     if(this.edited_object instanceof Link) return [];
     const
-        lis = this.edited_object.linksInScope,
+        lis = this.edited_object.inputs,
         list = [];
     for(let i = 0; i < lis.length; i++) {
       list.push(lis[i].displayName);
@@ -236,8 +239,10 @@ NOTE: Grouping groups results in a single group, e.g., (1;2);(3;4;5) evaluates a
     return list;
   }  
   
-  showVariables(type) {
+  showVariables(event, type) {
     // Compile list of variables in scope.
+    event.preventDefault();
+    event.stopPropagation();
     const
         tbl = this.variables,
         html = [];
@@ -258,7 +263,9 @@ NOTE: Grouping groups results in a single group, e.g., (1;2);(3;4;5) evaluates a
     e.preventDefault();
     e.stopPropagation();
     // Only hide when the mouse leaves the complete list.
-    if(e.target.nodeName === 'DIV') this.variables.style.display = 'none';    
+    if(e.target.nodeName === 'DIV' || e.target === this.text) {
+      this.variables.style.display = 'none';
+    }
   }
   
   insertVariable(nr) {

@@ -279,8 +279,15 @@ class CLASTModel {
     return [];
   }
   
+  areLinked(f1, f2) {
+    // Return TRUE if a link between the two factors exists (in either
+    // direction).
+    return f1 && f2 && (this.links[UI.linkIdentifier(f1, f2)] ||
+        this.links[UI.linkIdentifier(f2, f1)]);
+  }
+  
   inferParentCluster(obj) {
-    // Find the best "parent" cluster for link or constraint `obj`
+    // Find the best "parent" cluster for link `obj`.
     const
         p = obj.from_factor,
         q = object.to_factor;
@@ -325,8 +332,8 @@ class CLASTModel {
   //
 
   addActor(name, node=null) {
-    name = UI.cleanName(name);
     if(name === '') return this.actors[UI.nameToID(UI.NO_ACTOR)];
+    name = UI.cleanName(name);
     const id = UI.nameToID(name);
     if(!this.actors.hasOwnProperty(id)) {
       this.actors[id] = new Actor(name);
@@ -389,7 +396,7 @@ class CLASTModel {
       UI.warningEntityExists(nb);
       return null;
     }
-    const f = new Factor(this.top_cluster, name, actor.name);
+    const f = new Factor(this.top_cluster, name, actor);
     if(node) f.initFromXML(node);
     f.setCode();
     this.factors[f.identifier] = f;
@@ -577,8 +584,12 @@ class CLASTModel {
     for(let i = 0; i < this.selection.length; i++) {
       obj = this.selection[i];
       if(!(obj instanceof Link)) {
-        obj.x += dx;
-        obj.y += dy;
+        if(obj instanceof Factor) {
+          obj.movePositionInFocalCluster(dx, dy);
+        } else {
+          obj.x += dx;
+          obj.y += dy;
+        }
         minx = Math.min(minx, obj.x - obj.width / 2);
         miny = Math.min(miny, obj.y - obj.height / 2);
       }
@@ -701,21 +712,33 @@ class CLASTModel {
   
   dropSelectionIntoCluster(c) {
     // Move all selected nodes to cluster `c`.
-    let n = 0,
+    let nf = 0,
+        nc = 0,
         rmx = c.rightMarginX,
-        tlc = this.topLeftCornerOfSelection;
+        tlc = this.topLeftCornerOfSelection,
+        dx = rmx + 50 - tlc[0],
+        dy = 50 - tlc[1];
     for(let i = 0; i < this.selection.length; i++) {
       const obj = this.selection[i];
-      if(!(obj instanceof Link)) {
+      if(obj instanceof Cluster) {
         obj.setParent(c);
-        obj.x += rmx + 50 - tlc[0];
-        obj.y += 50 - tlc[1];
-        n++;
+        obj.x += dx;
+        obj.y += dy;
+        nc++;
+      } else if(obj instanceof Factor) {
+        // Create a placeholder for this factor (if it does not have one
+        // already -- this is checked for).
+        c.addFactorPosition(obj, obj.x + dx, obj.y + dy);
       }
       // NOTE: ignore selected links, as these will be "taken along"
       // automatically.
     }
-    UI.notify(pluralS(n, 'factor') + ' moved to cluster ' + c.displayName);
+    if(nc + nf) {
+      const msgs = [];
+      if(nc) msgs.push(pluralS(nc, 'cluster') + ' moved');
+      if(nf) msgs.push(pluralS(nf, 'factor') + ' copied');
+      UI.notify(msgs.join(' and ') + ' to cluster ' + c.displayName);
+    }
     // Clear the selection WITHOUT redrawing the selected entities
     // (as these will no longer be part of the graph)
     this.clearSelection(false);
@@ -767,6 +790,25 @@ class CLASTModel {
   // Methods that delete entities from the model
   //
   
+  deleteFactor(node) {
+    // Delete a factor and its associated links and constraints from the model.
+    // First generate the XML for restoring the node, but add it later to the
+    // UndoEdit so that it comes BEFORE the XML of its subelements.
+    let xml = node.asXML;
+    // Remove associated links
+    for(let l in this.links) if(this.links.hasOwnProperty(l)) {
+      l = this.links[l];
+      if(l.from_node == node || l.to_node == node) this.deleteLink(l);
+    }
+    UI.removeShape(node.shape);
+    // Get list of ALL clusters containing the product
+    const fpc = node.factorPositionClusters;
+    for(let i = 0; i < fpc.length; i++) fpc[i].deleteFactor(node);
+    delete this.factors[node.identifier];
+    // Now insert XML for node, so that the constraints will be restored properly
+    UNDO_STACK.addXML(xml);
+  }
+
   deleteCluster(c, with_xml=true) {
     // Remove cluster `c` from model
     // NOTE: only append the cluster's XML to the UndoEdit if it is the first
@@ -961,28 +1003,7 @@ class CLASTModel {
           const
               name = xmlDecoded(nodeContentByTag(c, 'name')),
               actor = xmlDecoded(nodeContentByTag(c, 'actor'));
-          // NOTE: Aspects initially belong to no link. The link property
-          // will be set when initializing the links of this model.
-          this.addFactor(name, this.actorByID(UI.nameToID(actor)), c);
-        }
-      }
-    }
-    // Only then create all activities, as these may have an actor and
-    // also aspects.
-    // NOTE: This may result in "orphan activities" because sub-activies
-    // may be referenced that have not been created yet.
-    n = childNodeByTag(node, 'activities');
-    if(n && n.childNodes) {
-      for(let i = 0; i < n.childNodes.length; i++) {
-        const c = n.childNodes[i];
-        if(c.nodeName === 'activity') {
-          const
-              name = xmlDecoded(nodeContentByTag(c, 'name')),
-              actor = xmlDecoded(nodeContentByTag(c, 'owner')),
-              a = this.addActivity(name, actor, c);
-          // NOTE: Top activity will already exist, and then no `initFromHTML`
-          // will be executed => initialize it explicitly.
-          if(a === this.top_activity) a.initFromXML(c);
+          this.addFactor(name, actor, c);
         }
       }
     }
@@ -1005,14 +1026,25 @@ class CLASTModel {
         }
       }
     }
+    n = childNodeByTag(node, 'clusters');
+    if(n && n.childNodes) {
+      for(let i = 0; i < n.childNodes.length; i++) {
+        const c = n.childNodes[i];
+        if(c.nodeName === 'cluster') {
+          const
+              name = xmlDecoded(nodeContentByTag(c, 'name')),
+              actor = xmlDecoded(nodeContentByTag(c, 'owner'));
+          this.addCluster(name, actor, c);
+        }
+      }
+    }
     this.focal_cluster = this.top_cluster;
     // Recompile expressions so that they refer to the correct entities.
     this.compileExpressions();
   }
 
   get asXML() {
-    let p = [' next-activity-number="', this.next_activity_number,
-        '" next-aspect-number="', this.next_aspect_number,
+    let p = [' next-factor-number="', this.next_factor_number,
         '" zoom="', this.last_zoom_factor,
         '" run-length="', this.run_length, '"'].join('');
     if(this.align_to_grid) p += ' align-to-grid="1"';
@@ -1029,29 +1061,17 @@ class CLASTModel {
         xml += this.actors[a].asXML;
       }
     }
-    xml += '</actors><aspects>';
-    for(let a in this.aspects) {
-      if(this.aspects.hasOwnProperty(a)) xml += this.aspects[a].asXML;
+    xml += '</actors><factors>';
+    for(let f in this.factors) {
+      if(this.factors.hasOwnProperty(f)) xml += this.factors[f].asXML;
     }
-    xml += '</aspects><activities>';
-    for(let a in this.activities) {
-      if(this.activities.hasOwnProperty(a)) xml += this.activities[a].asXML;
-    }
-    xml +='</activities><links>';
+    xml += '</factors><links>';
     for(let l in this.links) {
       if(this.links.hasOwnProperty(l)) xml += this.links[l].asXML;
     }
-    return xml + '</links></model>';
-  }
-  
-  rescueOrphans() {
-    // Set the correct parent activities.
-    for(let i = 0; i < this.orphan_list.length; i++) {
-      const
-          o = this.orphan_list[i],
-          a = this.activityByCode(o.subact);
-      if(a instanceof Activity) a.setParent(o.parent);
-    }
+    // NOTE: Cluster XML defines its own subclusters.
+    xml += `</links><clusters>${this.top_cluster.asXML}</clusters>`;
+    return xml + '</model>';
   }
   
   get listOfAllComments() {
@@ -1165,8 +1185,8 @@ class Actor {
   get factorCount() {
     // Return the number of factors "owned" by this actor.
     let n = 0;
-    for(let i = 0; i < MODEL.factors.length; i++) {
-      if(MODEL.factors[i].actor === this) n++;
+    for(let k in MODEL.factors) if(MODEL.factors.hasOwnProperty(k)) {
+      if(MODEL.factors[k].actor === this) n++;
     }
     return n;
   }
@@ -1389,8 +1409,7 @@ class NodeBox extends ObjectWithXYWH {
     this.actor = actor;
     this.name_lines = nameToLines(name);
     this.comments = '';
-    // Nodeboxes are assigned a unique code as "shorthand notation".
-    // NOTE: Decimal numbers for factors.
+    // Factors are assigned a unique code, clusters are not.
     this.code = null;
     this.frame_width = 0;
     this.frame_height = 0;
@@ -1487,18 +1506,21 @@ class NodeBox extends ObjectWithXYWH {
         ow = this.width,
         oh = this.height,
         an = (this.hasActor ? this.actor.name : ''),
-        ratio = (this instanceof Cluster ? 0.5 : 0.25);
+        ratio = (this instanceof Cluster ? 0.3 : 0.5);
     this.name_lines = nameToLines(this.name, an, ratio);
     this.bbox = UI.textSize(this.name_lines, 10);
     if(this instanceof Factor) {
-      this.width = this.bbox.width + 6;
-      this.height = this.bbox.height + 6;
-      this.frame_width = this.width;
+      this.frame_width = this.bbox.width + 6;
+      this.width = Math.max(CONFIGURATION.min_factor_width,
+          this.frame_width + 20);
+      this.height = this.bbox.height + 20;
     } else {
       this.frame_width = Math.max(50, this.bbox.width, this.bbox.height,
           UI.textSize(an).width) + 7;
-      this.width = Math.max(80, this.frame_width + 20);
-      this.height = this.width * Math.sqrt(3) / 2;
+      this.width = Math.max(CONFIGURATION.min_cluster_width,
+          this.frame_width + 20);
+      this.height = Math.max(this.bbox.height + 20,
+          this.width * Math.sqrt(3) / 2);
     }
     return this.width != ow || this.height != oh;
   }
@@ -1567,6 +1589,32 @@ class Cluster extends NodeBox {
     return max;
   }
   
+  containsPoint(mpx, mpy) {
+    // Returns TRUE iff given coordinates lie within the cluster rectangle.
+    return (Math.abs(mpx - this.x) <= this.width / 2 &&
+        Math.abs(mpy - this.y) <= this.height / 2);
+  }
+  
+  connectionPoint(p) {
+    const
+        dx = p.x - this.x,
+        dy = p.y - this.y;
+    let angle;
+    if(Math.abs(dx) < VM.NEAR_ZERO) {
+      angle = (dy >= 0 ? 0.5 : 1.5) * Math.PI;
+    } else {
+      angle = Math.atan(dy / dx);
+      if(dx < 0) angle += Math.PI;
+    }
+    const
+        hw = this.width / 2,
+        hh = this.height / 2,
+        r = Math.sqrt(hw*hw + hh*hh),
+        adx = Math.min(hw, Math.abs(r * Math.cos(angle))),
+        ady = Math.min(hh, Math.abs(r * Math.sin(angle)));
+    return {x: this.x + Math.sign(dx) * adx, y: this.y + Math.sign(dy) * ady};
+  }
+
   get asXML() {
     let xml;
     const cmnts = xmlEncoded(this.comments);
@@ -1623,8 +1671,9 @@ class Cluster extends NodeBox {
       for(let i = 0; i < n.childNodes.length; i++) {
         c = n.childNodes[i];
         if(c.nodeName === 'factor-position') {
-          name = xmlDecoded(nodeContentByTag(c, 'factor-name'));
-          const f = MODEL.nodeBoxByID(UI.nameToID(name));
+          const
+              code = nodeParameterValue(c, 'code'),
+              f = MODEL.factorByCode(code);
           if(f) this.addFactorPosition(f).initFromXML(c);
         }
       }
@@ -1682,7 +1731,7 @@ class Cluster extends NodeBox {
         fp.x = x;
         fp.y = y;
       }
-      this.factor_positions.push(pp);
+      this.factor_positions.push(fp);
     }
     return fp;
   }
@@ -1737,7 +1786,7 @@ class Cluster extends NodeBox {
         nla = {},
         dvl = {};
     // Create lookup with per sub-cluster the list of its factors. 
-    for(let i = 0; i < this.sub_activities.length; i++) {
+    for(let i = 0; i < this.sub_clusters.length; i++) {
       const sc = this.sub_clusters[i];
       nla[sc.identifier] = sc.allFactors;
     }
@@ -1770,7 +1819,7 @@ class Cluster extends NodeBox {
         // Do likewise for the TO factor.
         if(this.indexOfFactor(tf) >= 0) {
           // TO factor is visible in this cluster.
-          vta = tf;
+          vtf = tf;
         } else {
           // Find cluster that contains the TO factor.
           for(let k in nla) if(nla.hasOwnProperty(k)) {
@@ -1892,10 +1941,14 @@ class Cluster extends NodeBox {
 
 
 // CLASS Factor
-class Factor extends Node {
+class Factor extends NodeBox {
   constructor(cluster, name, actor) {
     super(cluster, name, actor);
     this.expression = new Expression(this, '');
+    // Keep track of incoming and outgoing links.
+    this.inputs = [];
+    this.outputs = [];
+    this.predecessors = [];
   }
 
   setCode() {
@@ -1917,6 +1970,30 @@ class Factor extends Node {
     let i = MODEL.focal_cluster.indexOfFactor(this);
     if(i < 0) return null;
     return MODEL.focal_cluster.factor_positions[i];
+  }
+  
+  containsPoint(x, y) {
+    // Return TRUE if (x, y) lies within the ellipsis.
+    const
+        rx = (x - this.x) / this.width * 2,
+        ry = (y - this.y) / this.height * 2;
+    return rx * rx + ry * ry < 0.95;
+  }
+  
+  connectionPoint(p) {
+    this.setPositionInFocalCluster();
+    const
+        dx = p.x - this.x,
+        dy = p.y - this.y;
+    let angle;
+    if(Math.abs(dx) < VM.NEAR_ZERO) {
+      angle = (dy >= 0 ? 0.5 : 1.5) * Math.PI;
+    } else {
+      angle = Math.atan(dy / dx);
+      if(dx < 0) angle += Math.PI;
+    }
+    return {x: this.x + this.width / 2 * Math.cos(angle),
+        y: this.y + this.height / 2 * Math.sin(angle)};
   }
   
   allLinksInCluster(c) {
@@ -1971,7 +2048,7 @@ class Factor extends Node {
     let xml = ['<factor code="', this.code,
         '"><name>', xmlEncoded(this.name),
         '</name><actor>', xmlEncoded(this.actor.name),
-        '<comments>', xmlEncoded(this.comments),
+        '</actor><comments>', xmlEncoded(this.comments),
         '</comments><x-coord>', this.x,
         '</x-coord><y-coord>', this.y,
         '</y-coord><expression>', this.expression.text,
@@ -1980,6 +2057,7 @@ class Factor extends Node {
   }
 
   initFromXML(node) {
+    this.code = nodeParameterValue(node, 'code');
     this.comments = xmlDecoded(nodeContentByTag(node, 'comments'));
     this.x = safeStrToInt(nodeContentByTag(node, 'x-coord'));
     this.y = safeStrToInt(nodeContentByTag(node, 'y-coord'));
@@ -1992,7 +2070,7 @@ class Factor extends Node {
     const fpc = [];
     for(let k in MODEL.clusters) if(MODEL.clusters.hasOwnProperty(k)) {
       const c = MODEL.clusters[k];
-      if(c.indexOfProduct(this) >= 0) fpc.push(c);
+      if(c.indexOfFactor(this) >= 0) fpc.push(c);
     }
     return fpc;
   }
@@ -2048,7 +2126,15 @@ class Factor extends Node {
     this.comments = f.comments;
     this.expression.text = f.expression.text;
   }
+  
+  isActive(t) {
+    return false;
+  }
 
+  activated(t) {
+    return false;
+  }
+  
 } // END of class Factor
 
 
@@ -2174,6 +2260,18 @@ class Link {
       if(this.deep_links[i].is_feedback) return true;
     }
     return false;
+  }
+  
+  inList(list) {
+    // Return TRUE iff both the FROM node and the TO node of this link
+    // are elements of `list`.
+    // NOTE: This method used in diafram-controller.js to see which links
+    // are to be included when the modeler performs a "rectangular area
+    // selection".
+    const
+        f_in = list.indexOf(this.from_factor) >= 0,
+        t_in = list.indexOf(this.to_factor) >= 0;
+    return f_in && t_in;
   }
   
 } // END of class Link

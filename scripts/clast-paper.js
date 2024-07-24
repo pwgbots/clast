@@ -184,66 +184,6 @@ class Shape {
     return el;
   }
   
-  addConnector(x, y, cl, id, ctxl) {
-    // Add a connector circle with the letter `l`.
-    // NOTES:
-    // (1) The ID of the owner of this shape (activity) is passed as a
-    //     data attribute `id` so that the SVG element "knows" for which
-    //     activity the aspect must be displayed.
-    // (2) The `aspect` data attribute is likewise set to the connector
-    //     letter `cl`.
-    // (3) The contextual links for this connector are passed by the list
-    //     `ctxl`. If this list is not empty, the connector is displayed
-    //     white-on-dark gray, and a mouseover event is added.
-    let fg = 'black',
-        bg = 'white',
-        n = ctxl.length,
-        a = MODEL.activities[id],
-        incx = a.incoming_expressions[cl],
-        incxd = (incx && incx.defined),
-        sw = 0.75,
-        fw = 400,
-        sc = UI.color.rim,
-        ctxlids = ctxl.map((l) => l.identifier).join(';');
-    if(incxd) {
-      sw = 1.5;
-      fw = 900;
-      sc = 'black';
-    }
-    if(n) {
-      fg = 'white';
-      bg = '#9090a0';
-      // Feedback link(s) are indicated by a black background.
-      for(let i = 0; i < n; i++) {
-        if(ctxl[i].is_feedback) {
-          bg = 'black';
-          break;
-        }
-      }
-    }
-    const c = this.addCircle(x, y, 6,
-        {fill: bg, stroke: sc, 'stroke-width': sw,
-            'font-weight': fw, 'data-id': id, 'data-aspect': cl,
-            'data-bg': bg, 'data-fg': fg, 'data-ix': incxd,
-            'data-lids': ctxlids});
-    this.addText(x, y, cl,
-        {'font-family': 'monospace', 'fill': fg, 'font-size': 9});
-    // Make SVG elements responsive to cursor event.
-    c.setAttribute('pointer-events', 'auto');
-    // Only the Output connector can be a tail connector, but for other
-    // connectors an incoming expression can be defined.
-    c.setAttribute('cursor', 'pointer');
-    UI.connector(c);
-    if(ctxlids) {
-      // Add a mouseover event that will display context links in the
-      // documentation browser.
-      c.addEventListener('mouseover', (event) => {
-          DOCUMENTATION_MANAGER.showContextLinks(event);
-        });
-    }
-    return this.element;
-  }
-
   moveTo(x, y) {
     const el = document.getElementById(this.id);
     if(el) {
@@ -272,11 +212,15 @@ class Paper {
     this.palette = {
       // Selected model elements are bright red
       select: '#ff0000',    
-      // Activities have dark gray rim...
+      // Nodes have dark gray rim...
       rim: '#606070',
-      // ... and state-dependent fill colors
-      fg_fill: '#ffffff',
-      bg_fill: '#e0e0f0',
+      // ...except when connecting.
+      connecting: '#00b0ff',
+      // Transparent for connecting rims.
+      transparent: 'rgba(255, 255, 255, 0.01)',
+      // Semi-transparent shades of blue when connecting,
+      from_rim: 'rgba(120, 0, 240, 0.1)',
+      to_rim: 'rgba(0, 196, 240, 0.15)',
       // Font colors for entities.
       actor_font: '#40a0e0', // medium blue
       active_rim: '#40b040', // middle green
@@ -375,7 +319,7 @@ class Paper {
     this.addMarker(defs, id, chev, 10, this.palette.select);
     id = 'c_o_n_n_e_c_t_i_n_g__c_h_e_v_r_o_n__t_i_p__ID*';
     this.connecting_chevron = `url(#${id})`;
-    this.addMarker(defs, id, chev, 10, this.palette.active_rim);
+    this.addMarker(defs, id, chev, 10, this.palette.connecting);
     id = 'f_e_e_d_b_a_c_k__c_h_e_v_r_o_n__t_i_p__ID*';
     this.feedback_chevron = `url(#${id})`;
     this.addMarker(defs, id, chev, 8, 'rgb(0, 0, 0)');
@@ -732,7 +676,7 @@ class Paper {
   // Metods for visual feedback while linking or selecting
   //
 
-  dragLineToCursor(x1, y1, x2, y2) {
+  dragLineToCursor(p1, p2) {
     // NOTE: Does not remove element; only updates path and opacity.
     let el = document.getElementById(this.drag_line);
     // Create it if not found
@@ -741,7 +685,7 @@ class Paper {
       el.id = this.drag_line;
       el.style.opacity = 0;
       el.style.fill = 'none';
-      el.style.stroke = UI.color.active_rim;
+      el.style.stroke = UI.color.connecting;
       el.style.strokeWidth = 1.5;
       el.style.strokeDasharray = UI.sda.dash;
       el.style.strokeLinecap = 'round';
@@ -751,27 +695,28 @@ class Paper {
     const
         // Control points shoud make the curve stand out, so use 25% of
         // the Euclidean distance between the end points as "stretch".
-        ed = 10 + Math.sqrt((x2 - x1) * (x2 - x1) + (y2 - y1) * (y2 - y1)) / 4,
-        // FROM control point should bend the curve around the FROM activity.
-        fcx = x1 + ed,
-        fcy = y1;
-        // TO control point is endpoint, or depends on relative position
-        // of the TO connector.
-    let tcx = x2,
-        tcy = y2;
-    if(UI.to_connector && UI.to_activity) {
-      const
-          tasp = UI.to_connector.dataset.aspect,
-          angle = 'ORPITC'.indexOf(tasp) * Math.PI / 3,
-          tact = UI.to_activity,
-          r = tact.width * 0.55 + ed;
-      tcx = tact.x + Math.cos(angle) * r;
-      tcy = tact.y + Math.sin(angle) * r;
+        dx = p2.x - p1.x,
+        dy = p2.y - p1.y,
+        ed = Math.max(0, (Math.sqrt(dx*dx + dy*dy) - 50) / 6);
+    let angle;
+    if(Math.abs(dx) < VM.NEAR_ZERO) {
+      angle = (dy >= 0 ? 0.5 : 1.5) * Math.PI;
+    } else {
+      angle = Math.atan(dy / dx);
+      if(dx < 0) angle += Math.PI;
     }
+    const
+        cosa = Math.cos(angle),
+        sina = Math.sin(angle),
+        fcx = p1.x + 15 * cosa,
+        fcy = p1.y + (15 + ed) * sina,
+        tcx = p2.x - (15 + ed) * cosa,
+        tcy = p2.y - 15 * sina;
     el.setAttribute('d',
-        `M${x1},${y1}C${fcx},${fcy},${tcx},${tcy},${x2},${y2}`);
+        `M${p1.x},${p1.y}C${fcx},${fcy},${tcx},${tcy},${p2.x},${p2.y}`);
     el.style.opacity = 1;
-    this.adjustPaperSize(x2, y2);
+    this.adjustPaperSize(p2.x, p2.y);
+    UI.scrollIntoView(el);
   }
   
   adjustPaperSize(x, y) {
@@ -907,9 +852,6 @@ class Paper {
         fc = mdl.focal_cluster,
         vl = fc.visibleLinks,
         dvl = fc.deepVisibleLinks;
-    for(let i = 0; i < fc.sub_clusters.length; i++) {
-      this.drawCluster(fc.sub_clusters[i]);
-    }
     // NOTE: The "deep visible links" are "virtual" link objects that
     // will be recognized as such by the link drawing routine. The are
     // drawn first because their lines will be thicker.
@@ -918,6 +860,12 @@ class Paper {
     }
     for(let i = 0; i < vl.length; i++) {
       this.drawLink(vl[i]);
+    }
+    for(let i = 0; i < fc.sub_clusters.length; i++) {
+      this.drawCluster(fc.sub_clusters[i]);
+    }
+    for(let i = 0; i < fc.factor_positions.length; i++) {
+      this.drawFactor(fc.factor_positions[i].factor);
     }
     // Draw notes last, as they are semi-transparent, and can be quite small.
     for(let i = 0; i < fc.notes.length; i++) {
@@ -963,9 +911,11 @@ class Paper {
     // Clear previous drawing.
     l.shape.clear();
     const
-        // Link is dashed when it has no assiciated aspects.
-        sda = (l.aspects.length ? 'none' : UI.sda.dash),
-        vn = l.visibleNodes;
+        // Link is dashed when its multiplier is undefined.
+        sda = (l.expression.defined ? 'none' : UI.sda.dash),
+        vn = l.visibleNodes,
+        activated = false,
+        active_color = this.palette.rim; // @@@@@@@@@ TO DO!
     // Double-check: do not draw unless both activities are visible.
     if(!vn[0] || !vn[1]) {
       const cdl = this.comprisingDeepLink(l);
@@ -1002,60 +952,35 @@ class Paper {
       ady = 3;
     }
     const
-        fa = l.from_activity,
-        ta = l.to_activity,
-        tc = l.to_connector,
-        pi3 = Math.PI / 3,
-        angle = 'ORPITC'.indexOf(tc) * pi3,
-        hsr3 = Math.sqrt(3) / 2,
-        cx1 = fa.x + dx + fa.width * 0.55,
-        cy1 = fa.y + dy,
-        r = ta.width * 0.55,
+        fp = l.from_factor.connectionPoint(l.to_factor),
+        tp = l.to_factor.connectionPoint(l.from_factor),
+        ftdx = tp.x - fp.x,
+        ftdy = tp.y - fp.y;
+    let angle;
+    if(Math.abs(ftdx) < VM.NEAR_ZERO) {
+      angle = (ftdy >= 0 ? 0.5 : 1.5) * Math.PI;
+    } else {
+      angle = Math.atan(ftdy / ftdx);
+      if(ftdx < 0) angle += Math.PI;
+    }
+    // Declare variables for the arrow point coordinates.
+    const
         cosa = Math.cos(angle),
         sina = Math.sin(angle),
-        cx2 = ta.x + dx + cosa * r,
-        cy2 = ta.y + dy + sina * r,
-        dcx = cx2 - cx1,
-        dcy = cy2 - cy1,
-        dr = 10 + Math.sqrt(dcx * dcx + dcy * dcy) / 8;
-    // Declare variables for the arrow point coordinates.
-    let x1, y1, x2, y2, fcx, fcy, tcx, tcy;
-    // Control point for (O) connector follows the straight line to the
-    // other connector up to +/- 30 degrees.
-    const
-        fpm60 = Math.abs(dcy) <= Math.abs(dcx) / hsr3 * 0.5,
-        fcpa = (dcx > 0 && fpm60 ? Math.atan(dcy / dcx) :
-            Math.sign(dcy) * pi3 * 0.5),
-        fcpsin = Math.sin(fcpa),
-        fcpcos = Math.cos(fcpa); 
-    x1 = cx1 + 7 * fcpcos;
-    y1 = cy1 + 7 * fcpsin;
-    fcx = cx1 + dr * fcpcos;
-    // NOTE: Pull more up or down when TO lies left of FROM; otherwise
-    // stay a bit more horizontal so that line becomes a bit curved.
-    const udy = (dcx < 0 ? Math.sign(dcy) * (dr + 50) : - 0.5 * dr * fcpsin);
-    fcy = cy1 + dr * fcpsin + udy;
-    // Likewise, the control point for the TO connector follows the
-    // straight line up to +/- 60 degrees of its default angle.
-    const
-        slatan = (dcx ? Math.atan(-dcy / dcx) : Math.PI / 2),
-        slangle = (dcx > 0 ? Math.PI - slatan :
-            (dcy < 0 ? -slatan : 2 * Math.PI - slatan)),
-        da = angle - slangle,
-        to_i = tc === 'I',
-        part = (to_i && dcx > 0 ? 0.1 : 1),
-        tpm60 = Math.abs(da) < pi3 * part,
-        rot = ('TC'.indexOf(tc) >= 0 ? -1 :  1),
-        tcpa = (tpm60 ? slangle :
-            angle + (to_i ? Math.sign(dcy) * part : Math.sign(dcx)) * pi3 * rot),
-        tcpsin = Math.sin(tcpa),
-        tcpcos = Math.cos(tcpa),
-        ccx2 = ((tc === 'R' && dcx > 0 && dcy > 0) ||
-            (tc === 'C' && dcx > 0 && dcy < 0) ? -100 : 0);
-    x2 = cx2 + tcpcos * 10;
-    y2 = cy2 + tcpsin * 10;
-    tcx = cx2 + tcpcos * (dr + 3 / part) + ccx2;
-    tcy = cy2 + tcpsin * dr + (to_i && dcx < 0 ? dr - Math.sign(dcy) * 50 : 0);
+        ed = Math.sqrt(ftdx*ftdx + ftdy*ftdy),
+        mx = (ed < 30 ? 0 : 15 + ed / 4),
+        my = (ed < 30 ? 0 : 15),
+        x1 = fp.x,
+        y1 = fp.y,
+        // NOTE: Subtract some pixels because chevron *centers* on
+        // the end point.
+        x2 = tp.x - 4 * cosa,
+        y2 = tp.y - 4 * sina,
+        fcx = x1 + mx * cosa,
+        fcy = y1 + my * sina,
+        tcx = x2 - mx * cosa,
+        tcy = y2 - my * sina;
+        
     // First draw a thick but near-transparent line so that the mouse
     // events is triggered sooner.
     const
@@ -1097,97 +1022,35 @@ class Paper {
             'stroke-dasharray': sda, 'stroke-linecap': 'round',
             'marker-end': chev, opacity: opac});
     if(activated) {
-      // Highlight arrow if FROM acitivy was activated in the previous
+      // Highlight arrow if FROM factor was "activated" in the previous
       // cycle.
       tl.setAttribute('style', this.active_link_filter);
     }
-    if(l.aspects.length) {
+    if(l.expression.defined && (l.expression.isStatic || MODEL.solved)) {
+      // When possible, show sign of link multiplier, and also its value
+      // if this is not 1 or -1.
       const
-          firstRealLinkWithAspect = (a) => {
-              if(ndl) {
-                for(let i = 0; i < ndl; i++) {
-                  const dl = l.deep_links[i];
-                  if(dl.aspects.indexOf(a) >= 0) return dl;
-                }
-              }
-              return l;
-            },
-          sauc = (event) => { UI.setAspectUnderCursor(event); },
-          cauc = () => { UI.clearAspectUnderCursor(); },
-          n = l.aspects.length,
-          step = 0.4 / n;
-      let p = 0.5 - (n - 1) * step;
-      for(let i = 0; i < n; i++) {
+          r = l.expression.result(MODEL.t),
+          sign = '-0+'.charAt(Math.sign(r) + 1),
+          bp = this.bezierPoint(
+                [x1, y1], [fcx, fcy], [tcx, tcy], [x2, y2], 0.85);
+      l.shape.addCircle(bp[0], bp[1], 5, {stroke: stroke_color,
+          'stroke-width': 0.6, fill: 'white'});
+      l.shape.addText(bp[0], bp[1] - 1, sign, {'font-family': 'monospace',
+            'font-size': 10, 'font-weight': 700, fill: 'black'});
+      if(Math.abs(Math.abs(r) - 1) > VM.NEAR_ZERO) {
         const
-            a = l.aspects[i],
-            frlwa = firstRealLinkWithAspect(a),
-            aid = a.identifier,
+            s = VM.sig4Dig(r),
+            nbb = this.numberSize(s, 9),
+            bw = nbb.width + 4,
+            bh = nbb.height + 2,
             bp = this.bezierPoint(
-                [x1, y1], [fcx, fcy], [tcx, tcy], [x2, y2], p),
-            le = l.shape.addText(bp[0], bp[1], a.name_lines,
-                {'font-size': 9, 'pointer-events': 'auto'}),
-            nimbus = (a.comments && DOCUMENTATION_MANAGER.visible ?
-                ', 0 0 3.5px rgb(0,80,255)' : '');
-        // Use italic font when aspect is time-dependent.
-        if(a.expression.defined && !a.expression.isStatic) {
-          le.setAttribute('font-style', 'italic');
-        }
-        // Use bold-face red when aspect is selected by the modeler.
-        if(a === MODEL.selected_aspect) {
-          le.setAttribute('fill', UI.color.select);
-          le.setAttribute('font-weight', 700);
-        }
-        le.setAttribute('style',
-            'text-shadow: 0.5px 0.5px rgb(255, 255, 255, 0.6), ' +
-                '-0.5px -0.5px rgb(255, 255, 255, 0.6), ' +
-                '0.5px -0.5px rgb(255, 255, 255, 0.6), ' +
-                '-0.5px 0.5px rgb(255, 255, 255, 0.6)' + nimbus);
-        // Add identifying data attribute...
-        le.setAttribute('data-id', aid);
-        // ... also for the link...
-        le.setAttribute('data-linkid', frlwa.identifier);
-        // ... and for a deep link the index in the drawn list, because
-        // this will permit redrawing this link after selecting and/or
-        // editing this aspect.
-        if(ndl) le.setAttribute('data-ddlid', l.identifier);
-        // Make aspect text responsive to cursor events...
-        le.setAttribute('pointer-events', 'auto');
-        le.addEventListener('mouseover', sauc);
-        le.addEventListener('mouseout', cauc);
-        // ... and make it show this by changing the cursor.
-        le.setAttribute('cursor', 'pointer');
-        if(a.expression.defined && fa.isActive(MODEL.t - 1)) {
-          // When model has been solved, show value of aspect if the
-          // FROM activity was active in the previous cycle.
-          const
-              x = a.expression,
-              r = x.result(MODEL.t),
-              rp = r === VM.PENDING,
-              // When AFTER or UNTIL are in play, show their setpoint.
-              ap = (rp ? x.after_points[MODEL.t] :
-                  (x.time_until ? x.until_points[MODEL.t] : false)),
-              extra = (ap === false ? '' : (rp ? '' : '\u25D4') +
-                  UI.clockTime(ap)),
-              s = VM.sig4Dig(r),
-              nbb = this.numberSize(s + extra, 9),
-              nobb = this.numberSize(s, 9),
-              bw = nbb.width + 4,
-              bh = nbb.height + 2,
-              bx = bp[0] + (a.width + bw) / 2,
-              by = bp[1];
-          l.shape.addRect(bx, by, bw, bh,
-              {stroke: '#80a0ff', 'stroke-width': 0.5, fill: '#d0f0ff'});
-          if(r <= VM.ERROR || r >= VM.EXCEPTION) {
-            l.shape.addNumber(bx, by, s + extra,
-                {'font-size': 9, 'fill': this.palette.VM_error});
-          } else {
-            l.shape.addNumber(bx - bw / 2 + 2 + nobb.width / 2, by, s,
-                {'font-size': 9, 'fill': '#0000a0', 'font-weight': 700});
-            l.shape.addText(bx + nobb.width, by, extra,
-                {'font-size': 9, 'fill': '#f07000'});
-          }
-        }
-        p += 2 * step;
+                  [x1, y1], [fcx, fcy], [tcx, tcy], [x2, y2], 0.8);
+        l.shape.addRect(bp[0], bp[1], bw, bh,
+            {stroke: '#80a0ff', 'stroke-width': 0.5, fill: '#d0f0ff'});
+        l.shape.addNumber(bp[0], bp[1], s, {'font-size': 9,
+            'fill': (r <= VM.ERROR || r >= VM.EXCEPTION ?
+                this.palette.VM_error : '#0000a0')});
       }
     }
     // Highlight shape if it has comments.
@@ -1197,102 +1060,150 @@ class Paper {
     l.shape.appendToDOM();
   }
 
-  drawActivity(act, dx=0, dy=0) {
+  drawCluster(clstr, dx=0, dy=0) {
+    // Clear previous drawing
+    clstr.shape.clear();
+    // NOTE: Do not draw cluster unless it is a node in the focal cluster.
+    if(MODEL.focal_cluster.sub_clusters.indexOf(clstr) < 0) return;
+    let stroke_color = this.palette.rim,
+        stroke_width = 1.5,
+        fill_color = 'white',
+        font_color = 'black';
+    if(clstr.selected) {
+      stroke_color = this.palette.select;
+      stroke_width = 2.5;
+    }
+    let w = clstr.width,
+        h = clstr.height;
+    // Clusters are displayed as dash-rimmed rectangles.
+    const
+        x = clstr.x + dx,
+        y = clstr.y + dy;
+    // Draw frame.
+    clstr.shape.addRect(x, y, h, w,
+        {fill: fill_color, stroke: stroke_color,
+            'stroke-width': stroke_width, 'stroke-dasharray': UI.sda.dot});
+    // Add overlay with rim to permit linking to this cluster.
+    const rim = clstr.shape.addRect(x, y, h, w,
+        {stroke: this.palette.transparent, 'stroke-width': 9,
+            fill: this.palette.transparent, 'pointer-events': 'auto',
+            'data-id': clstr.identifier});
+    UI.nodeRim(rim);
+    // Draw text.
+    const
+        lcnt = clstr.name_lines.split('\n').length,
+        cy = (clstr.hasActor ? y - 11 / (lcnt + 1) : y);
+    clstr.shape.addText(x, cy, clstr.name_lines,
+        {fill: (clstr.allFactors.length ? font_color : 'silver'),
+            'font-size': 11});
+    if(clstr.hasActor) {
+      const
+          th = lcnt * this.font_heights[11],
+          anl = UI.stringToLineArray(clstr.actor.name, hw * 0.85, 11),
+          format = {'font-size': 11, fill: this.palette.actor_font,
+                  'font-style': 'italic'};
+      let any = cy + th/2 + 7;
+      for(let i = 0; i < anl.length; i++) {
+        clstr.shape.addText(x, any, anl[i], format);
+        any += 11;
+      }
+    }
+    if(clstr === UI.target_cluster) {
+      // Highlight cluster if it is the drop target for the selection.
+      clstr.shape.element.childNodes[0].setAttribute('style',
+          this.target_filter);
+      clstr.shape.element.childNodes[1].setAttribute('style',
+          this.target_filter);
+    } else if(DOCUMENTATION_MANAGER.visible && clstr.comments) {
+      // Highlight shape if it has comments.
+      clstr.shape.element.childNodes[0].setAttribute('style',
+          this.documented_filter);
+      clstr.shape.element.childNodes[1].setAttribute('style',
+          this.documented_filter);
+    } else {
+      // No highlighting.
+      clstr.shape.element.childNodes[0].setAttribute('style', '');
+      clstr.shape.element.childNodes[1].setAttribute('style', '');
+    }
+    clstr.shape.element.setAttribute('opacity', 0.9);
+    clstr.shape.appendToDOM();    
+  }
+  
+  drawFactor(fact, dx=0, dy=0) {
     // Clear previous drawing.
-    act.shape.clear();
+    fact.shape.clear();
     // Do not draw process unless in focal activity.
-    if(MODEL.focal_activity.sub_activities.indexOf(act) < 0) return;
+    if(MODEL.focal_cluster.indexOfFactor(fact) < 0) return;
     // Set local constants and variables.
     const
-        background = act.isBackground,
-        x = act.x + dx,
-        y = act.y + dy,
-        hw = act.width / 2,
-        hh = act.height / 2,
-        qw = hw / 2,
-        active = act.isActive(MODEL.t);
+        x = fact.x + dx,
+        y = fact.y + dy,
+        hw = fact.width / 2,
+        hh = fact.height / 2,
+        active = fact.isActive(MODEL.t);
     let stroke_width = 1,
         stroke_color = this.palette.rim,
-        fill_color = (background ? this.palette.bg_fill :
-            this.palette.fg_fill);
+        fill_color = 'white';
     // Active states have a dark green rim.
     if(active) {
       stroke_width = 1.5;
-      stroke_color = act.activeColor(MODEL.t);
+      stroke_color = fact.activeColor(MODEL.t);
     }
     // Being selected overrules special border properties except SDA
-    if(act.selected) {
+    if(fact.selected) {
       stroke_color = this.palette.select;
       stroke_width = 2.5;
     }
     // Draw frame using colors as defined above.
-    act.shape.addPath(['M', x - hw, ',', y, 'l', qw, ',-', hh,
-        'l', hw, ',0l', qw, ',', hh, 'l-', qw, ',', hh, 'l-', hw, ',0Z'],
-        {fill: fill_color, stroke: stroke_color,
-            'stroke-width': stroke_width});
-    if(background) {
-      act.shape.addPath(['M', x, ',', y, 'l', qw, ',',
-          (act.isExit ? '-' : ''), hh - 0.5, 'l-', hw, ',0Z'],
-          {fill: 'white', opacity: 0.6});
-    }
-    // Draw inner shadow if activity has sub_activities.
-    if(!act.isLeaf) {
-      act.shape.addPath(['M', x - (hw-2.5), ',', y, 'l', (qw-1), ',-', (hh-2),
-          'l', (hw-2.5), ',0l', (qw-1), ',', (hh-2), 'l-', (qw-1), ',', (hh-2),
-          'l-', (hw-2.5), ',0Z'],
-              {fill: 'none', stroke: stroke_color, 'stroke-width': 5,
-                  opacity: 0.4});
-    }
-    // Add actor color unless it is white.
-    if(act.actor.color !== '#ffffff') {
-      let cd = 3,
-          cd2 = 6;
-      if(act.isLeaf) {
-        cd = 1.24;
-        cd2 = 2.5;
-      }
-      act.shape.addPath(['M', x - (hw-cd2), ',', y, 'l', (qw-cd), ',-', (hh-cd2),
-          'l', (hw-cd2), ',0l', (qw-cd), ',', (hh-cd2), 'l-', (qw-cd), ',', (hh-cd2),
-          'l-', (hw-cd2), ',0Z'],
-              {fill: 'none', stroke: act.actor.color, 'stroke-width': 4});      
-    }
-    // Add the six aspect circles.
+    fact.shape.addEllipse(x, y, hw, hh, {fill: fill_color,
+        stroke: stroke_color, 'stroke-width': stroke_width});
+    // Add actor color inner rim.
+    fact.shape.addEllipse(x, y, hw - 2.5, hh - 2.5,
+        {stroke: fact.actor.color, 'stroke-width': 4, fill: 'none',
+            'pointer-events': 'auto', 'data-id': fact.identifier});
+    // Add near-invisible "connector" rim.
+    const rim = fact.shape.addEllipse(x, y, hw, hh,
+        {stroke: this.palette.transparent, 'stroke-width': 9,
+            fill: this.palette.transparent,
+            'pointer-events': 'auto', 'data-id': fact.identifier});
+    UI.nodeRim(rim);
+    // Always draw factor name plus actor name (if any).
     const
-        letters = 'ORPITC',
-        aid = act.identifier,
-        // Get lookup object for contextual links for this activity.
-        cl = act.contextualLinks;
-    for(let i = 0; i < 6; i++) {
-      const
-          c = letters.charAt(i),
-          a = Math.PI * i / 3,
-          ax = x + Math.cos(a) * hw * 1.1,
-          ay = y + Math.sin(a) * hw * 1.1;
-      act.shape.addConnector(ax, ay, c, aid, cl[c]);
-    }
-    // Always draw process name plus actor name (if any).
-    const
-        th = act.name_lines.split('\n').length * this.font_heights[10] / 2,
-        cy = (act.hasActor ? y - 8 : y - 2);
-    act.shape.addText(x, cy, act.name_lines, {'font-size': 10});
-    if(act.hasActor) {
-      act.shape.addText(x, cy + th + 6, act.actor.name,
+        th = fact.name_lines.split('\n').length * this.font_heights[10] / 2,
+        cy = (fact.hasActor ? y - 6 : y);
+    fact.shape.addText(x, cy, fact.name_lines, {'font-size': 10});
+    if(fact.hasActor) {
+      fact.shape.addText(x, cy + th + 6, fact.actor.name,
           {'font-size': 10, fill: this.palette.actor_font,
               'font-style': 'italic'});
     }
+    if(fact.expression.defined) {
+      let r = '';
+      if(fact.expression.isStatic) {
+        r = VM.sig4Dig(fact.expression.result(0));
+        // Display lock symbol on the left.
+        fact.shape.addText(x - hw + 8, y, '\u{1F512}',
+            {'font-size': 9, fill: 'black'});
+      } else {
+        if(MODEL.solved) r = VM.sig4Dig(fact.expression.result(MODEL.t));
+      }
+      if(r) {
+        const nbb = this.numberSize(r, 9);
+        fact.shape.addText(x + hw - 5 - nbb.width / 2, y, r,
+            {'font-size': 9, fill: 'gray'});
+      }
+    }
     // Highlight shape if needed.
     let filter = '';
-    if(act.activated(MODEL.t)) {
+    if(fact.activated(MODEL.t)) {
       filter = this.activated_filter;
-    } else if(act === UI.target_activity) {
-      filter = this.target_filter;
-    } else if(DOCUMENTATION_MANAGER.visible && act.comments) {
+    } else if(DOCUMENTATION_MANAGER.visible && fact.comments) {
       filter = this.documented_filter;
     }
-    act.shape.element.firstChild.setAttribute('style', filter);
+    fact.shape.element.firstChild.setAttribute('style', filter);
     // Make shape slightly transparent.
-    act.shape.element.setAttribute('opacity', 0.9);
-    act.shape.appendToDOM();    
+    fact.shape.element.setAttribute('opacity', 0.9);
+    fact.shape.appendToDOM();    
   }
   
   drawNote(note, dx=0, dy=0) {
