@@ -3090,13 +3090,14 @@ console.log('HERE name conflicts', name_conflicts, mapping);
         eb = md.element('expression'),
         x = (node && node instanceof Factor ? node.expression : null);
     md.element('action').innerText = (node ? 'Edit' : 'Add');
+    if(node) md.element('type').innerText = node.type.toLowerCase();
     md.element('name').value = (node ? node.name : '');
     an.value = (node && node.hasActor ? node.actor.name : '');
     // NOTE: Expression button is only shown when an existing factor is
     // edited. By default, new factors have no associated expression.
     if(node && node instanceof Factor) {
       an.style.width = '200px';
-      eb.style.display = 'block';
+      eb.style.display = 'inline-block';
       eb.title = x.text;
     } else {
       eb.style.display = 'none';
@@ -3122,7 +3123,7 @@ console.log('HERE name conflicts', name_conflicts, mapping);
       return false;
     }
     // Redraw the shape, as its appearance may have changed.
-    UI.paper.drawObject(node);
+    UI.drawObject(node);
     if(node === MODEL.focal_cluster) {
       this.focal_name.innerHTML = node.displayName;
     }
