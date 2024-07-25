@@ -677,7 +677,7 @@ div.dragger {
 /* styles for the ADD Node dialog */
 #add-node-dlg {
   width: 270px;
-  height: 70px;
+  height: min-content;
 }
 
 /* LOAD modal dialog */

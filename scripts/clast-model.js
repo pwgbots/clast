@@ -63,8 +63,6 @@ class CLASTModel {
     this.last_zoom_factor = 1;
     
     // Diagram editor related properties.
-    this.selected_aspect = null;
-    this.selected_aspect_link = null;
     this.selection = [];
     // Set the indicator that the model has not been executed yet.
     this.set_up = false;
@@ -752,12 +750,6 @@ class CLASTModel {
     // undoable. The UndoEdit is created by the calling routine; the methods
     // that actually delete model elements append their XML to the XML attribute
     // of this UndoEdit
-    // NOTE: When aspect is selected, this requires different action.
-    if(this.selected_aspect) {
-      this.selected_aspect.removeFromLink(this.selected_aspect_link);
-      this.deselectAspect();
-      return;
-    }
     let obj,
         fc = this.focal_cluster;
     // Update the documentation manager (GUI only) if selection contains the
@@ -1809,11 +1801,11 @@ class Cluster extends NodeBox {
           // Find cluster that contains the FROM factor.
           for(let k in nla) if(nla.hasOwnProperty(k)) {
             if(nla[k].indexOf(ff) >= 0) {
-              vff = MODEL.nodeByID(k);
+              vff = MODEL.clusters[k];
               break;
             }
           }
-          // If not an immediate sub-activity, it is a "deep" link.
+          // If found, it is a "deep" link.
           if(vff) deep = true;
         }
         // Do likewise for the TO factor.
@@ -1824,11 +1816,11 @@ class Cluster extends NodeBox {
           // Find cluster that contains the TO factor.
           for(let k in nla) if(nla.hasOwnProperty(k)) {
             if(nla[k].indexOf(tf) >= 0) {
-              vtf = MODEL.activities[k];
+              vtf = MODEL.clusters[k];
               break;
             }
           }
-          // Not an immediate sub-activity, so it is a "deep" link.
+          // If found, it is a "deep" link.
           if(vtf) deep = true;
         }
         if(deep) {
@@ -2211,8 +2203,8 @@ class Link {
   }
 
   get identifier() {
-    // NOTE: link IDs are based on the activity codes rather than IDs,
-    // as this prevents problems when activities are renamed.
+    // NOTE: link IDs are based on the factor codes rather than IDs,
+    // as this prevents problems when factors are renamed.
     return UI.linkIdentifier(this.from_factor, this.to_factor);
   }
 
@@ -2240,7 +2232,7 @@ class Link {
   
   get visibleNodes() {
     // Returns tuple [from, to] where TRUE indicates that this node is
-    // visible in the focal activity.
+    // visible in the focal cluster.
     const
         fc = MODEL.focal_cluster,
         fv = (fc.indexOfFactor(this.from_factor) >= 0),

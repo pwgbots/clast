@@ -101,8 +101,7 @@ class Monitor {
       const x = VM.call_stack[i];
       vlist.push(x.object.displayName);
       xlist.push(x.text);
-    // @@TO DO: collect scope to display.
-      tlist.push('???');
+      tlist.push(x.object.type.toLowerCase());
     }
     // Highlight variables where they are used in the expressions.
     const
@@ -113,14 +112,14 @@ class Monitor {
         // Ignore selectors, as these may be different per experiment
         const
             vn = vlist[j],
-            vnc = `<span title="Aspect defined for: ${tlist[j]}" style=` +
+            vnc = `<span title="Variable defined for ${tlist[j]}" style=` +
                 `"font-weight: 600; color: ${cc[j % ncc]}">${vn}</span>`;
         xlist[i] = xlist[i].split(vn).join(vnc);
       }
     }
     // Then also color the variables
     for(let i = 0; i < vlist.length; i++) {
-      vlist[i] = `<span  title="Aspect defined for: ${tlist[i]}" style=` +
+      vlist[i] = `<span  title="Variable defined for ${tlist[i]}" style=` +
           `"font-weight: 600; color: ${cc[i % ncc]}">${vlist[i]}</span>`;
     }
     // Start without indentation

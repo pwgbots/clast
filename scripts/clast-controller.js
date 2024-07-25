@@ -495,9 +495,14 @@ class Controller {
     return pan1.length - pan2.length;
   }
   
-  linkIdentifier(from_a, to_a) {
-    // NOTE: A link ID has THREE underscores between its node IDs.
-    return from_a.code + '___' + to_a.code;
+  linkIdentifier(from, to) {
+    // NOTES:
+    // (1) A link ID has THREE underscores between its node IDs.
+    // (2) A "deep" link can have clusters as nodes.
+    const
+        fid = (from instanceof Factor ? from.code : from.identifier),
+        tid = (to instanceof Factor ? to.code : to.identifier);       
+    return fid + '___' + tid;
   }
 
   nameToID(name) {
@@ -731,6 +736,8 @@ class Controller {
         () => UI.addNode(''));
     this.modals['add-node'].cancel.addEventListener('click',
         () => UI.cancelAddNode());
+    this.modals['add-node'].element('expression').addEventListener('click',
+        () => UI.editFactorExpression());
 
     this.modals.note.ok.addEventListener('click',
         () => UI.addNode('note'));
@@ -1020,13 +1027,13 @@ class Controller {
   }
 
   get doubleClicked() {
-    // Return TRUE when a "double-click" occurred
+    // Return TRUE when a "double-click" occurred.
     const
         now = Date.now(),
         dt = now - this.last_up_down_without_move;
     this.last_up_down_without_move = now;
     // Consider click to be "double" if it occurred less than 300 ms ago
-    if(dt < 400) {
+    if(dt < 300) {
       this.last_up_down_without_move = 0;
       return true;
     }
@@ -1807,14 +1814,12 @@ class Controller {
       this.add_y = this.mouse_y;
       const obj = this.active_button.id.split('-')[0];
       if(!this.stayActive) this.resetActiveButton();
+      this.edited_object = null;
       if(obj === 'factor' || obj === 'cluster') {
         setTimeout(() => {
               const md = UI.modals['add-node'];
-              md.element('action').innerText = 'Add';
               md.element('type').innerText = obj;
-              md.element('name').value = '';
-              md.element('actor').value = '';
-              md.show('name');
+              UI.showNodePropertiesDialog();
             });
       } else if(obj === 'note') {
         setTimeout(() => {
@@ -1833,9 +1838,9 @@ class Controller {
       if(this.on_link) {
         this.showLinkPropertiesDialog(this.on_link);
       } else if(this.on_factor) {
-        this.showFactorPropertiesDialog(this.on_factor);
+        this.showNodePropertiesDialog(this.on_factor);
       } else if(this.on_cluster) {
-        this.showClusterPropertiesDialog(this.on_cluster);
+        this.showNodePropertiesDialog(this.on_cluster);
       } else if(this.on_note) {
         this.showNotePropertiesDialog(this.on_note);
       }
@@ -1926,7 +1931,6 @@ class Controller {
     // Then check whether the user is moving a node (possibly part of a
     // larger selection).
     } else if(this.dragged_node) {
-console.log('HERE dragged target', this.dragged_node, this.target_cluster, this.on_cluster);
       // Always perform the move operation (this will do nothing if the
       // cursor did not move).
       MODEL.moveSelection(
@@ -1959,12 +1963,12 @@ console.log('HERE dragged target', this.dragged_node, this.target_cluster, this.
         if(this.dragged_node instanceof Cluster) {
           // NOTE: Alt-(double)click indicates "show properties"!
           if(e.altKey) {
-            this.showClusterPropertiesDialog(this.dragged_node);
+            this.showNodePropertiesDialog(this.dragged_node);
           } else {
             this.makeFocalCluster(this.dragged_node);
           }
         } else if(this.dragged_node instanceof Factor) {
-          this.showFactorPropertiesDialog(this.dragged_node);
+          this.showNodePropertiesDialog(this.dragged_node);
         } else {
           this.showNotePropertiesDialog(this.dragged_node);
         }
@@ -3077,18 +3081,33 @@ console.log('HERE name conflicts', name_conflicts, mapping);
   // Node modal (for factors and clusters)
 
   showNodePropertiesDialog(node=null) {
-    // Open the node modal and set its fields to properties of `n`.
+    // Open the node modal and set its fields to properties of `node`
+    // if it is defined.
     if(node === MODEL.top_cluster) return;
-    const md = this.modals['add-node'];
-    md.element('action').innerText = 'Edit';
-    md.element('name').value = node.name;
-    md.element('actor').value = (node.hasActor ? node.actor.name : '');
+    const
+        md = this.modals['add-node'],
+        an = md.element('actor'),
+        eb = md.element('expression'),
+        x = (node && node instanceof Factor ? node.expression : null);
+    md.element('action').innerText = (node ? 'Edit' : 'Add');
+    md.element('name').value = (node ? node.name : '');
+    an.value = (node && node.hasActor ? node.actor.name : '');
+    // NOTE: Expression button is only shown when an existing factor is
+    // edited. By default, new factors have no associated expression.
+    if(node && node instanceof Factor) {
+      an.style.width = '200px';
+      eb.style.display = 'block';
+      eb.title = x.text;
+    } else {
+      eb.style.display = 'none';
+      an.style.width = '223px';
+    }
     md.show('name');
     this.edited_object = node;
   }
   
   updateNodeProperties() {
-    // Updates the edited cluster if all input is OK.
+    // Updates the edited factor or cluster if all input is OK.
     // @@TO DO: prepare for undo
     const
         md = this.modals['add-node'],
@@ -3114,14 +3133,21 @@ console.log('HERE name conflicts', name_conflicts, mapping);
 
   cancelAddNode() {
     // Not only hides the node modal, but also clears the edited object.
-    this.modals['add-node'].hide();
+    const
+        md = this.modals['add-node'],
+        node = this.edited_object;
+    if(node && node instanceof Factor) {
+      // Restore orgiginal expression text.
+      const x = node.expression;
+      x.text = md.element('expression').title;
+      x.reset();
+    }
     this.edited_object = false;    
+    md.hide();
   }
 
-  showFactorPropertiesDialog(f) {
-    // NOTE: The factor properties modal is the Expression Editor.
-    this.edited_object = f;
-    X_EDIT.editExpression(f);
+  editFactorExpression() {    
+    X_EDIT.editExpression(this.edited_object);
   }
   
   showLinkPropertiesDialog(l) {

@@ -60,13 +60,6 @@ function pluralS(n, s, special='') {
       (n === 1 ? s : (special ? special : s + (s.endsWith('s') ? 'es' : 's')));
 }
 
-function circledLetter(l) {
-  // Return Unicode character for circled connector (aspect) letter `l`.
-  const i = 'CORPIT'.indexOf(l);
-  if(l < 0) return '';
-  return ['\u24B8', '\u24C4', '\u24C7', '\u24C5', '\u24BE', '\u24C9'][i];
-}
-
 function safeStrToFloat(str, val=0) {
   // Return numeric value of floating point string, interpreting both
   // dot and comma as decimal point.
@@ -803,18 +796,20 @@ function nameToLines(name, actor_name='', ratio=0.3) {
   // the node box.
   let m = actor_name.length;
   const
-      d = Math.floor(Math.sqrt(ratio * name.length)),
+      d = Math.floor(ratio * name.length),
       // Do not wrap strings shorter than 12 characters (about 50 pixels).
-      limit = Math.max(Math.ceil(name.length / d), m, 12),
+      limit = Math.max(d, m, 12),
       a = name.split(' ');
-  // Split words at '-' when wider than limit
+  // Cut the first line a bit short (by 1/5 of the limit). 
+  let cut = Math.floor(limit / 5);
+  // Split words at '-' when wider than limit.
   for(let j = 0; j < a.length; j++) {
-    if(a[j].length > limit) {
+    if(a[j].length > limit - cut) {
       const sw = a[j].split('-');
       if(sw.length > 1) {
-        // Replace j-th word by last fragment of split string
+        // Replace j-th word by last fragment of split string.
         a[j] = sw.pop();
-        // Insert remaining fragments before
+        // Insert remaining fragments before.
         while(sw.length > 0) a.splice(j, 0, sw.pop() + '-');
       }
     }
@@ -829,7 +824,7 @@ function nameToLines(name, actor_name='', ratio=0.3) {
       l = ww[n],
       space;
   for(let i = 1 + n; i < a.length; i++) {
-    if(l + ww[i] < limit) {
+    if(l + ww[i] < limit - cut) {
       space = (lines[n].endsWith('-') ? '' : ' ');
       lines[n] += space + a[i];
       l += ww[i] + space.length;
@@ -837,6 +832,8 @@ function nameToLines(name, actor_name='', ratio=0.3) {
       n++;
       lines[n] = a[i];
       l = ww[i];
+      // Cut applies only to the first line.
+      cut = 0;
     }
   }
   return lines.join('\n');

@@ -832,7 +832,7 @@ class Paper {
   }
   
   comprisingDeepLink(l) {
-    // Return drawn deep link that comprises `l`. 
+    // Return drawn deep link that comprises `l`.
     for(let k in this.drawn_deep_links) {
       if(this.drawn_deep_links.hasOwnProperty(k)) {
         const dl = this.drawn_deep_links[k];
@@ -888,13 +888,13 @@ class Paper {
       // the selection .
       if(!(obj instanceof Link)) UI.drawObject(obj, dx, dy);
     }
-    // First redraw all deep links that are visible in the focal activity.
+    // First redraw all deep links that are visible in the focal cluster.
     this.removeDeepLinkShapes();
     const dvl = mdl.focal_cluster.deepVisibleLinks;
     for(let k in dvl) if(dvl.hasOwnProperty(k)) {
       this.drawLink(dvl[k], dx, dy);
     }
-    // Then also redraw all links that are visible in the focal activity.
+    // Then also redraw all links that are visible in the focal cluster.
     const vl = mdl.focal_cluster.visibleLinks;
     for(let i = 0; i < vl.length; i++) {
       this.drawLink(vl[i], dx, dy);
@@ -916,15 +916,10 @@ class Paper {
         vn = l.visibleNodes,
         activated = false,
         active_color = this.palette.rim; // @@@@@@@@@ TO DO!
-    // Double-check: do not draw unless both activities are visible.
+    // Double-check: do not draw unless both nodes are visible.
     if(!vn[0] || !vn[1]) {
       const cdl = this.comprisingDeepLink(l);
-      if(cdl) {
-        l = cdl;
-      } else {
-        console.log('ANOMALY: no cdl found for link', l.displayName);
-        return;
-      }
+      if(cdl) l = cdl;
     }
     if(l.selected || l.containsSelected) {
       // Draw arrow line thick and in red.
@@ -1080,11 +1075,11 @@ class Paper {
         x = clstr.x + dx,
         y = clstr.y + dy;
     // Draw frame.
-    clstr.shape.addRect(x, y, h, w,
+    clstr.shape.addRect(x, y, w, h,
         {fill: fill_color, stroke: stroke_color,
             'stroke-width': stroke_width, 'stroke-dasharray': UI.sda.dot});
     // Add overlay with rim to permit linking to this cluster.
-    const rim = clstr.shape.addRect(x, y, h, w,
+    const rim = clstr.shape.addRect(x, y, w, h,
         {stroke: this.palette.transparent, 'stroke-width': 9,
             fill: this.palette.transparent, 'pointer-events': 'auto',
             'data-id': clstr.identifier});
@@ -1132,7 +1127,7 @@ class Paper {
   drawFactor(fact, dx=0, dy=0) {
     // Clear previous drawing.
     fact.shape.clear();
-    // Do not draw process unless in focal activity.
+    // Do not draw factor unless in focal cluster.
     if(MODEL.focal_cluster.indexOfFactor(fact) < 0) return;
     // Set local constants and variables.
     const

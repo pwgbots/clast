@@ -325,7 +325,7 @@ class Finder {
         obj = (se ? MODEL.objectByID(id) : null);
     if(!obj) console.log('Cannot reveal ID', id);
     if(obj instanceof Factor) {
-      // @@TO DO: iterate through list of clusters containing this aspect.
+      // @@TO DO: iterate through list of clusters containing this factor.
     } else if(obj instanceof Link) {
     } else if(obj.parent) {
       // Make parent cluster focal...

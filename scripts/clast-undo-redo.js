@@ -49,7 +49,7 @@ class UndoEdit {
     // If the identifier is set, return the action followed by the class name 
     // of the object. NOTE: `obj` should then not be NULL, but check anyway
     if(this.action === 'drop' || this.action == 'lift') {
-      return `Move ${pluralS(this.properties.length, 'function')} to function ` +
+      return `Move ${pluralS(this.properties.length, 'entities')} to cluster ` +
           MODEL.objectByID(this.object_id).displayName;
     } else if(this.object_id) {
       const
@@ -71,8 +71,6 @@ class UndoEdit {
     for(let i = 0; i < MODEL.selection.length; i++) {
       this.selection.push(MODEL.selection[i].identifier);
     }
-    this.selected_aspect = MODEL.selected_aspect;
-    this.selected_aspect_link = MODEL.selected_aspect_link;
   }
   
   get getSelection() {
@@ -171,6 +169,9 @@ class UndoStack {
     // Set the properties of this undoable, depending on the type of action
     if(action === 'move') {
       // `args` holds the dragged node => store its ID and position
+      // NOTE: for factors, use their FactorPosition in the focal cluster
+      const obj = (args instanceof Factor ?
+          args.positionInFocalCluster : args);
       ue.properties = [args.identifier, args.x, args.y, 0, 0];
       // NOTE: object_id is NOT set, as dragged selection may contain
       // multiple entities
@@ -217,6 +218,8 @@ class UndoStack {
     // First get the dragged node
     let obj = MODEL.objectByID(ue.properties[0]); 
     if(obj) {
+      // For factors, use the x and y of the FactorPosition
+      if(obj instanceof Factor) obj = obj.positionInFocalCluster;
       // Calculate the relative move (dx, dy)
       const
           dx = ue.properties[1] - obj.x,
@@ -234,8 +237,6 @@ class UndoStack {
       MODEL.translateGraph(tdx, tdy);
       // Restore the selection as it was at the time of the "move" action
       MODEL.selectList(ue.getSelection);
-      MODEL.selected_aspect = ue.selected_aspect;
-      MODEL.selected_aspect_link = ue.selected_aspect_link;
       // Move the selection back to its original position
       MODEL.moveSelection(dx - tdx, dy - tdy);
     }
@@ -246,13 +247,15 @@ class UndoStack {
     // selection (so that they can be RE-deleted).
     // NOTES:
     // (1) Store focal cluster, because this may change while initializing
-    //     acluster from XML.
+    //     a cluster from XML.
     // (2) Set "selected" attribute of objects to FALSE, as the selection
     //     will be restored from UndoEdit.
     const n = parseXML(MODEL.xml_header + `<edits>${xml}</edits>`);
     if(n && n.childNodes) {
       let c,
-          li = [];  
+          li = [],
+          fpi = [],
+          ci = [];  
       for(let i = 0; i < n.childNodes.length; i++) {
         c = n.childNodes[i];
         if(c.nodeName === 'actor') {
@@ -260,19 +263,19 @@ class UndoStack {
         } else if(c.nodeName === 'note') {
           const obj = MODEL.addNote(c);
           obj.selected = false;
-        } else if(c.nodeName === 'activity') {
-          const obj = MODEL.addActivity(
+        } else if(c.nodeName === 'factor') {
+          const obj = MODEL.addFactor(
               xmlDecoded(nodeContentByTag(c, 'name')),
               xmlDecoded(nodeContentByTag(c, 'owner')), c);
           obj.selected = false;
-        } else if(c.nodeName === 'aspect') {
-          // Add aspect without specifying a link.
-          MODEL.addAspect(xmlDecoded(nodeContentByTag(c, 'name')),
-              null, c);
-        // ... but merely collect indices of link-related nodes to save
+        // ... but merely collect indices of link nodes to save
         // the effort to iterate over ALL childnodes again.
-        } else if(c.nodeName.startsWith('link')) {
+        } else if(c.nodeName === 'link') {
           li.push(i);
+        } else if(c.nodeName === 'factor-position') {
+          fpi.push(i);
+        } else if(c.nodeName === 'cluster') {
+          ci.push(i);
         }
       }
       for(let i = 0; i < li.length; i++) {
@@ -289,8 +292,47 @@ class UndoStack {
           } else {
             console.log('ERROR: Failed to add link from', fc, 'to', tc);
           }
+        }
+      }
+      // Then restore factor positions.
+      // NOTE: These correspond to the factors that were part of the
+      // selection; all other factor positions are restored as part of their
+      // containing clusters
+      for(let i = 0; i < fpi.length; i++) {
+        c = n.childNodes[fpi[i]];
+        // Double-check that this node defines a factor position.
+        if(c.nodeName === 'factor-position') {
+          const f = MODEL.factorByCode(nodeParameterValue(c, 'code'));
+          if(f) {
+            f.selected = false;
+            MODEL.focal_cluster.addFactorPosition(f).initFromXML(c);
+          }
+        }
+      }
+      // Lastly, restore clusters.
+      // NOTE: Store focal cluster, because this may change while initializing
+      // a cluster from XML
+      const fc = MODEL.focal_cluster;
+      for(let i = 0; i < ci.length; i++) {
+        c = n.childNodes[ci[i]];
+        if(c.nodeName === 'cluster') {
+          const sc = MODEL.addCluster(xmlDecoded(nodeContentByTag(c, 'name')),
+            xmlDecoded(nodeContentByTag(c, 'owner')), c);
+          sc.selected = false;
+
+// TEMPORARY trace (remove when done testing)
+if (MODEL.focal_cluster === fc) {
+  console.log('NO refocus needed');
+} else {
+  console.log('Refocusing from ... to ... : ', MODEL.focal_cluster, fc);
+}
+          // Restore original focal cluster because addCluster may shift focus
+          // to a sub-cluster
+          MODEL.focal_cluster = fc;
+        }
       }
     }
+    // Done.
     MODEL.clearSelection();
   }
   
@@ -302,7 +344,7 @@ class UndoStack {
       // Get the action to be undone
       ue = this.undoables.pop();
       // Focus on the cluster that was focal at the time of action.
-      // NOTE: Do this WITHOUT calling UI.makeFocalActivity because this
+      // NOTE: Do this WITHOUT calling UI.makeFocalCluster because this
       // clears the selection and redraws the graph.
       MODEL.focal_cluster = ue.cluster;
 //console.log('undo' + ue.fullAction);
@@ -347,8 +389,8 @@ class UndoStack {
       } else if(ue.action === 'delete') {
         this.restoreFromXML(ue.xml);
         // Restore the selection as it was at the time of the "delete"
-        // action *unless* a link aspect has been restored. 
-        if(!MODEL.selected_aspect) MODEL.selectList(ue.getSelection);
+        // action. 
+        MODEL.selectList(ue.getSelection);
         // Clear the XML (not useful for REDO delete)
         ue.xml = '';
         this.redoables.push(ue);
@@ -409,18 +451,12 @@ class UndoStack {
         re.object_id = re.properties[1];
         this.undoables.push(re);
       } else if(re.action === 'delete') {
-        // Check for deletion of an aspect.
-        if(MODEL.selected_aspect && MODEL.selected_aspect_link) {
-          this.undoables.push(re);
-          MODEL.selected_aspect.removeFromLink(MODEL.selected_aspect_link);
-        } else {
-          // If not an aspect, restore the selection as it was at the
-          // time of the "delete" action...
-          MODEL.selectList(re.getSelection);
-          this.undoables.push(re);
-          // ... and then perform a delete action.
-          MODEL.deleteSelection();
-        }
+        // Restore the selection as it was at the time of the "delete"
+        // action...
+        MODEL.selectList(re.getSelection);
+        this.undoables.push(re);
+        // ... and then perform a delete action.
+        MODEL.deleteSelection();
       } else if(re.action === 'drop' || re.action === 'lift') {
         const c = MODEL.objectByID(re.object_id);
         if(c instanceof Cluster) MODEL.dropSelectionIntoCluster(c);
