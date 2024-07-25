@@ -1556,6 +1556,13 @@ class Cluster extends NodeBox {
     return 'C';
   }
 
+  get infoLineName() {
+    const
+        afl = this.allFactors.length,
+        extra = `<span class="extra">(${pluralS(afl, 'factor')})</span>`;
+    return `<em>Cluster:</em> ${this.displayName}${extra}`;
+  }
+
   get nestingLevel() {
     // Return the "depth" of this cluster in the cluster hierarchy
     if(this.cluster) return this.cluster.nestingLevel + 1; // recursion!
@@ -1988,6 +1995,19 @@ class Factor extends NodeBox {
         y: this.y + this.height / 2 * Math.sin(angle)};
   }
   
+  get infoLineName() {
+    let extra = '';
+    const x = this.expression;
+    if(x.defined) {
+      if(MODEL.solved || x.isStatic) {
+        const r = VM.sig4Dig(x.result(MODEL.t));
+        extra += ` = <span style="color: blue">${r}</span>`;
+      }
+      extra += `<code style="color: gray"> &#x225C; ${x.text}</code>`;
+    }
+    return `<em>Factor:</em> ${this.displayName}${extra}`;
+  }
+
   allLinksInCluster(c) {
     // Return TRUE iff this factor is linked only to factors in
     // cluster `c`.
