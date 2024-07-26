@@ -263,9 +263,9 @@ class Paper {
     const
         defs = this.newSVGElement('defs'),
         // Standard arrow tips: solid triangle
-        tri = 'M0,0 L10,5 L0,10 z',
+        tri = 'M0,0 L5,5 L0,10 z',
         // Wedge arrow tips have no baseline
-        wedge = 'M0,0 L10,5 L0,10 L0,8.5 L8.5,5 L0,1.5 z',
+        wedge = 'M1,2 L6,5 L1,8',
         // link arrows have a flat, "chevron-style" tip
         chev = 'M0,0 L10,5 L0,10 L4,5 z',
         // Feedback arrows are hollow and have hole in their baseline
@@ -331,10 +331,13 @@ class Paper {
     this.addMarker(defs, id, chev, 10, 'rgb(128, 128, 144)');
     id = 'o_p_e_n__w_e_d_g_e__t_i_p__ID*';
     this.open_wedge = `url(#${id})`;
-    this.addMarker(defs, id, wedge, 9, this.palette.rim);
+    this.addMarker(defs, id, wedge, 11, this.palette.rim);
     id = 's_e_l_e_c_t_e_d__o_p_e_n__w_e_d_g_e__t_i_p__ID*';
     this.selected_open_wedge = `url(#${id})`;
-    this.addMarker(defs, id, wedge, 11, this.palette.select);
+    this.addMarker(defs, id, wedge, 13, this.palette.select);
+    id = 'd_e_e_p__o_p_e_n__w_e_d_g_e__t_i_p__ID*';
+    this.deep_open_wedge = `url(#${id})`;
+    this.addMarker(defs, id, wedge, 14, 'rgb(128, 128, 144)');
     id = 'r__b__g_r_a_d_i_e_n_t__ID*';
     this.red_blue_gradient = `url(#${id})`;
     this.addGradient(defs, id, 'rgb(255,176,176)', 'rgb(176,176,255)');
@@ -392,6 +395,10 @@ class Paper {
           {cx: 5, cy: 5, rx: 4, ry: 4, stroke: 'none'});
     } else {
       shape = this.newSVGElement('path');
+      if(mid.indexOf('w_e_d_g_e') > 0) {
+        shape.setAttribute('fill', 'none');
+        shape.setAttribute('stroke', mcolor);
+      }
       shape.setAttribute('d', mpath);
     }
     shape.setAttribute('stroke-linecap', 'round');
@@ -712,6 +719,9 @@ class Paper {
         fcy = p1.y + (15 + ed) * sina,
         tcx = p2.x - (15 + ed) * cosa,
         tcy = p2.y - 15 * sina;
+    // Subtract a few pixels to accomodate the wedge.
+    p2.x -= 5 * cosa;
+    p2.y -= 5 * sina;
     el.setAttribute('d',
         `M${p1.x},${p1.y}C${fcx},${fcy},${tcx},${tcy},${p2.x},${p2.y}`);
     el.style.opacity = 1;
@@ -783,17 +793,17 @@ class Paper {
   //
   
   arc(r, srad, erad) {
-    // Returns SVG path code for an arc having radius `r`, start angle `srad`,
-    // and end angle `erad`
+    // Return SVG path code for an arc having radius `r`, start angle `srad`,
+    // and end angle `erad`.
     return 'a' + [r, r, 0, 0, 1, r * Math.cos(erad) - r * Math.cos(srad),
         r * Math.sin(erad) - r * Math.sin(srad)].join(',');
   }
 
   bezierPoint(a, b, c, d, t) {
-    // Returns the point on a cubic Bezier curve from `a` to `d` with control
+    // Return the point on a cubic Bezier curve from `a` to `d` with control
     // points `b` and `c`, and `t` indicating the relative distance from `a`
-    // as a fraction between 0 and 1. NOTE: the four points must be represented
-    // as lists [x, y]
+    // as a fraction between 0 and 1.
+    // NOTE: The four points must be represented as lists [x, y]
     function interPoint(a, b, t) {
       // Local function that performs linear interpolation between two points
       // `a` = [x1, y1] and `b` = [x2, y2] when parameter `t` indicates
@@ -806,17 +816,52 @@ class Paper {
           cd = interPoint(c, d, t);
     return interPoint(interPoint(ab, bc, t), interPoint(bc, cd, t), t);
   }
-
-  relDif(n1, n2) {
-    // Returns the relative difference (n1 - n2) / |n2| unless n2 is
-    // near-zero; then it returns the absolute difference n1 - n2
-    const div = Math.abs(n2);
-    if(div < VM.NEAR_ZERO) {
-      return n1 - n2;
-    }
-    return (n1 - n2) / div;
-  }
   
+  bezierFactorAtDistanceFromHead(a, b, c, d, ed) {
+    // Return the fraction t (cf. function above) for wich the Bezier curve
+    // point lies at Euclidean distance `ed` from end point `d`.
+    const
+        dx = d[0] - a[0],
+        dy = d[1] - a[1],
+        ed_ad = Math.sqrt(dx*dx + dy*dy),
+        tsl = 1 - ed / ed_ad,
+    // Now tsl is a first approximation based on a straight line.
+    // Check how far off this is from the Bezier point for this factor.
+        b1 = this.bezierPoint(a, b, c, d, tsl),
+        dx1 = d[0] - b1[0],
+        dy1 = d[1] - b1[1],
+        ed_b1d = Math.sqrt(dx1*dx1 + dy1*dy1),
+        f1 = ed_b1d / ed;
+    // When `ed` is (relatively) very close to end point `d`, we're done.
+//    console.log('HERE f1, tsl', f1, tsl);
+    if(Math.abs(f1 - 1) < 0.005) return tsl;
+    // When f1 > 1, we're still too far from d, still, so we must use
+    // a slightly higher value of t, otherwise a lower.
+    let t = tsl * (f1 > 1 ? 1.05 : 0.95);
+//    console.log('HERE new t is', t);
+    // Repeat (we will turn this into a loop).
+    const      
+        b2 = this.bezierPoint(a, b, c, d, t),
+        dx2 = d[0] - b2[0],
+        dy2 = d[1] - b2[1],
+        ed_b2d = Math.sqrt(dx2*dx2 + dy2*dy2),
+        f2 = ed_b2d / ed;
+    // When `ed` is (relatively) very close to end point `d`, we're done.
+//    console.log('HERE f2, t', f2, t);
+    if(Math.abs(f2 - 1) < 0.005) return t;
+    t =  t * (f2 > 1 ? 1.05 : 0.95);
+    // Repeat (we will turn this into a loop).
+    const      
+        b3 = this.bezierPoint(a, b, c, d, t),
+        dx3 = d[0] - b3[0],
+        dy3 = d[1] - b3[1],
+        ed_b3d = Math.sqrt(dx3*dx3 + dy3*dy3),
+        f3 = ed_b3d / ed;
+    // When `ed` is (relatively) very close to end point `d`, we're done.
+//    console.log('HERE f3, t', f3, t);
+    return t;
+  }
+
   //
   // Diagram-drawing method draws the diagram for the focal cluster
   //
@@ -925,7 +970,7 @@ class Paper {
       // Draw arrow line thick and in red.
       stroke_color = this.palette.select;
       stroke_width = 1.75;
-      chev = this.selected_chevron;
+      chev = this.selected_open_wedge;
       ady = 4;
     } else {
       stroke_width = 1.25;
@@ -942,39 +987,30 @@ class Paper {
         chev = this.feedback_chevron;
       } else {
         stroke_color = this.palette.rim;
-        chev = this.chevron;
+        chev = this.open_wedge;
       }
       ady = 3;
     }
     const
-        fp = l.from_factor.connectionPoint(l.to_factor),
-        tp = l.to_factor.connectionPoint(l.from_factor),
-        ftdx = tp.x - fp.x,
-        ftdy = tp.y - fp.y;
-    let angle;
-    if(Math.abs(ftdx) < VM.NEAR_ZERO) {
-      angle = (ftdy >= 0 ? 0.5 : 1.5) * Math.PI;
-    } else {
-      angle = Math.atan(ftdy / ftdx);
-      if(ftdx < 0) angle += Math.PI;
-    }
+        ff = l.from_factor,
+        tf = l.to_factor;
+    if(ff instanceof Factor) ff.setPositionInFocalCluster();
+    if(tf instanceof Factor) tf.setPositionInFocalCluster();
+    const
+        fp = ff.connectionPoint(tf, true),
+        tp = tf.connectionPoint(ff, false);
     // Declare variables for the arrow point coordinates.
     const
-        cosa = Math.cos(angle),
-        sina = Math.sin(angle),
-        ed = Math.sqrt(ftdx*ftdx + ftdy*ftdy),
-        mx = (ed < 30 ? 0 : 15 + ed / 4),
-        my = (ed < 30 ? 0 : 15),
         x1 = fp.x,
         y1 = fp.y,
         // NOTE: Subtract some pixels because chevron *centers* on
         // the end point.
-        x2 = tp.x - 4 * cosa,
-        y2 = tp.y - 4 * sina,
-        fcx = x1 + mx * cosa,
-        fcy = y1 + my * sina,
-        tcx = x2 - mx * cosa,
-        tcy = y2 - my * sina;
+        x2 = tp.x + 2 * tp.tcos,
+        y2 = tp.y + 2 * tp.tsin,
+        fcx = fp.fcx,
+        fcy = fp.fcy,
+        tcx = tp.tcx,
+        tcy = tp.tcy;
         
     // First draw a thick but near-transparent line so that the mouse
     // events is triggered sooner.
@@ -998,6 +1034,9 @@ class Paper {
     // Display control points (for testing & debugging).
     l.shape.addCircle(fcx, fcy, 2, {fill: 'red'});
     l.shape.addCircle(tcx, tcy, 2, {fill: 'blue'});
+    // Also connect center points by a silver line.
+    l.shape.addPath([`M${ff.x},${ff.y}L${tf.x},${tf.y}`],
+        {fill: 'none', stroke: 'silver'});
 */
     // Add shape to list of drawn deep links if applicable.
     if(ndl) this.drawn_deep_links[l.identifier] = l;
@@ -1008,7 +1047,7 @@ class Paper {
       // so they are always depicted in gray.
       stroke_width = 2.5;
       stroke_color = (activated ? '#60b060' : '#808090');
-      chev = this.deep_chevron;
+      chev = this.deep_open_wedge;
       opac = 0.75;
     }
     const tl = l.shape.addPath(
@@ -1027,8 +1066,11 @@ class Paper {
       const
           r = l.expression.result(MODEL.t),
           sign = '-0+'.charAt(Math.sign(r) + 1),
+          bf = this.bezierFactorAtDistanceFromHead(
+                [x1, y1], [fcx, fcy], [tcx, tcy], [x2, y2], 15),
           bp = this.bezierPoint(
-                [x1, y1], [fcx, fcy], [tcx, tcy], [x2, y2], 0.85);
+                [x1, y1], [fcx, fcy], [tcx, tcy], [x2, y2], bf);
+//console.log('HERE 0.85 or bf?', bf);
       l.shape.addCircle(bp[0], bp[1], 5, {stroke: stroke_color,
           'stroke-width': 0.6, fill: 'white'});
       l.shape.addText(bp[0], bp[1] - 1, sign, {'font-family': 'monospace',

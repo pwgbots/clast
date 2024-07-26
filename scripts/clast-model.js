@@ -175,7 +175,7 @@ class CLASTModel {
           // NOTE: recursive calls to objectByName
           ff = this.objectByName(nn[0]),
           tf = this.objectByName(nn[1]);
-      if(fa && ta) return this.linkByID(UI.linkIdentifier(ff, tf));
+      if(ff && tf) return this.linkByID(UI.linkIdentifier(ff, tf));
       return null;
     }
     // No link? Then standard conversion to ID.
@@ -1979,20 +1979,70 @@ class Factor extends NodeBox {
     return rx * rx + ry * ry < 0.95;
   }
   
-  connectionPoint(p) {
-    this.setPositionInFocalCluster();
+  connectionPoint(p, tail) {
     const
+        hw = this.width / 2,
+        hh = this.height / 2,
+        hwr = hw / hh,
+        pi = Math.PI,
         dx = p.x - this.x,
-        dy = p.y - this.y;
-    let angle;
-    if(Math.abs(dx) < VM.NEAR_ZERO) {
-      angle = (dy >= 0 ? 0.5 : 1.5) * Math.PI;
+        dy = p.y - this.y,
+        cp = {};
+    let dydx = 0,
+        angle,
+        atan;
+    // For near-vertical line, treat angles as special case.
+    if(Math.abs(dx) < 0.5) {
+      angle = (dy >= 0 ? 0.5 : 1.5) * pi;
+      atan = angle;
+    } else if(Math.abs(dy) < 0.5) {
+      angle = (dx >= 0 ? 0 : pi);
+      atan = angle;
     } else {
-      angle = Math.atan(dy / dx);
-      if(dx < 0) angle += Math.PI;
+      dydx = dy / dx;
+      // For TAIL factors, transform the angle such that it "lingers"
+      // around the horizontal.
+      if(tail) {
+        dydx /= Math.pow(Math.abs(dx), 0.25);
+      } else {
+        dydx *= Math.pow(Math.abs(dy), 0.25);
+      }
+      angle = Math.atan(dydx);
+      if(dx < 0) angle += pi;
+      // Compute the angle that is orthogonal to the tangent line on the
+      // rim of an ellipse at the point where a line departing from the
+      // ellipse center under `angle` intersects with the rim.
+      atan = Math.atan(hwr * dydx);
+      if(dx < 0) atan += pi;
     }
-    return {x: this.x + this.width / 2 * Math.cos(angle),
-        y: this.y + this.height / 2 * Math.sin(angle)};
+    // Calculate the point on the ellipse for this factor.
+    const
+        // Euclidean distance from other center point MINUS half width
+        // of this node and the other node (if known).
+        onhw = (p.hasOwnProperty('width') ? p.width / 2 : 0),
+        onhh = (p.hasOwnProperty('height') ? p.height / 2 : 0),
+        ed = Math.sqrt(dx*dx + dy*dy) -
+            Math.abs(Math.cos(angle)) * (hw + onhw) -
+            Math.abs(Math.sin(angle)) * (hh + onhh),
+        // Use one fourth of this Euclidean distance for the control
+        // point (relative to the connection point). 
+        cpm = Math.max(5, ed / 4),
+        epx = Math.sign(dx) * hw * hh / Math.sqrt(hh*hh + hw*hw*dydx*dydx),
+        epy = Math.sign(dy) * Math.sqrt(1 - (epx / hw) * (epx / hw)) * hh; 
+    cp.x = this.x + epx;
+    cp.y = this.y + epy;
+    cp.fcos = Math.cos(angle);
+    cp.fsin = Math.sin(angle);
+    // FROM node control points align with the line from the center.
+    cp.fcx = cp.x + cpm * cp.fcos;
+    cp.fcy = cp.y + cpm * cp.fsin;
+    // TO node control points are orthogonal to the tangent line of
+    // the TO ellipse.
+    cp.tcos = Math.cos(atan);
+    cp.tsin = Math.sin(atan);
+    cp.tcx = cp.x + cpm * cp.tcos;
+    cp.tcy = cp.y + cpm * cp.tsin;
+    return cp;
   }
   
   get infoLineName() {

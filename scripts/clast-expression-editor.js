@@ -173,7 +173,6 @@ NOTE: Grouping groups results in a single group, e.g., (1;2);(3;4;5) evaluates a
   cancel() {
     // Close the expression editor dialog.
     this.edited_expression = null;
-    UI.edited_object = null;
     UI.modals.expression.hide();
   }
 
@@ -202,7 +201,6 @@ NOTE: Grouping groups results in a single group, e.g., (1;2);(3;4;5) evaluates a
       this.edited_expression.text = xp.expr;
       if(reset) UI.resetModel();
       UI.modals.expression.hide();
-      UI.edited_object = false;
       ok = true;
     }
     return ok;
@@ -246,8 +244,14 @@ NOTE: Grouping groups results in a single group, e.g., (1;2);(3;4;5) evaluates a
     const
         tbl = this.variables,
         html = [];
-    this.in_scope = (type === 'factor' ? this.factorsInScope :
-        this.linksInScope);
+    let offset = 37;
+    if(type === 'factor') {
+      this.in_scope = this.factorsInScope;
+    } else {
+      // Display popup list a bit more to the right.
+      offset = 20;
+      this.in_scope = this.linksInScope;
+    }
     this.in_scope.sort((a, b) => UI.compareFullNames(a, b));
     for(let i = 0; i < this.in_scope.length; i++) {
       html.push(`<tr class="list">
@@ -255,6 +259,7 @@ NOTE: Grouping groups results in a single group, e.g., (1;2);(3;4;5) evaluates a
         </tr>`);
     }
     tbl.innerHTML = '<table>' + html.join('') + '</table>';
+    this.variables.style.left = `calc(100% - ${offset}px)`;
     this.variables.style.display = 'block';
   }
   
