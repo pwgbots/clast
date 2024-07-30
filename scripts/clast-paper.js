@@ -1070,7 +1070,6 @@ class Paper {
           sign = '-0+'.charAt(Math.sign(r) + 1),
           bp = this.bezierPointAtDistanceFromHead(
                 [x1, y1], [fcx, fcy], [tcx, tcy], [x2, y2], 15);
-//console.log('HERE 0.85 or bf?', bf);
       l.shape.addCircle(bp[0], bp[1], 5, {stroke: stroke_color,
           'stroke-width': 0.6, fill: 'white'});
       l.shape.addText(bp[0], bp[1] - 1, sign,
