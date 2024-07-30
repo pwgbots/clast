@@ -1519,11 +1519,11 @@ class NodeBox extends ObjectWithXYWH {
         an = (this.hasActor ? this.actor.name : ''),
         ratio = (this instanceof Cluster ? 0.3 : 0.5);
     this.name_lines = nameToLines(this.name, an, ratio);
-    this.bbox = UI.textSize(this.name_lines, 10);
+    this.bbox = UI.textSize(this.name_lines + '\n' + an, 10);
     if(this instanceof Factor) {
       this.frame_width = this.bbox.width + 6;
-      this.width = Math.max(CONFIGURATION.min_factor_width,
-          this.frame_width + 20);
+      this.width = Math.max(CONFIGURATION.min_factor_width - 40,
+          UI.textSize(an).width * 1.5, this.frame_width) + 40;
       this.height = this.bbox.height + 20;
     } else {
       this.frame_width = Math.max(50, this.bbox.width, this.bbox.height,
@@ -2259,4 +2259,3 @@ class Link {
   }
   
 } // END of class Link
-

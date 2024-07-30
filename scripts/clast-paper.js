@@ -1073,8 +1073,8 @@ class Paper {
 //console.log('HERE 0.85 or bf?', bf);
       l.shape.addCircle(bp[0], bp[1], 5, {stroke: stroke_color,
           'stroke-width': 0.6, fill: 'white'});
-      l.shape.addText(bp[0], bp[1] - 1, sign, {'font-family': 'monospace',
-            'font-size': 10, 'font-weight': 700, fill: 'black'});
+      l.shape.addText(bp[0], bp[1] - 1, sign,
+          {'font-size': 10, 'font-weight': 700, fill: 'black'});
       if(Math.abs(Math.abs(r) - 1) > VM.NEAR_ZERO) {
         const
             s = VM.sig4Dig(r),

@@ -1,4 +1,15 @@
 @font-face {
+  font-family: Flow;
+  src: url(fonts/Flow.otf);
+}
+
+@font-face {
+  font-family: Flow;
+  src: url(fonts/Flow-Bold.otf);
+  font-weight: bold;
+}
+
+@font-face {
   font-family: Lato;
   src: url(fonts/Lato-Regular.ttf);
 }

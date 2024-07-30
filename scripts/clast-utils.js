@@ -794,7 +794,7 @@ function nameToLines(name, actor_name='', ratio=0.3) {
   // width/height ratio is assumed, as this produces quite acceptable
   // results. Actor names are not split, so their length may stretch
   // the node box.
-  let m = actor_name.length;
+  let m = Math.round(actor_name.length * 1.3);
   const
       d = Math.floor(ratio * name.length),
       // Do not wrap strings shorter than 12 characters (about 50 pixels).

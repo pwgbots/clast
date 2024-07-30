@@ -38,7 +38,7 @@ const CONFIGURATION = {
     // Font properties for SVG diagram
     // NOTE: When a font name comprises multiple words, it must be enclosed
     // like so: &quot;Times New Roman&quot;
-    default_font_name: 'Arial',
+    default_font_name: 'Flow',
     // Undo stack size limits the number of user actions that can be undone 
     undo_stack_size: 20,
     // The progress needle interval affects the update frequency of the progress
