@@ -1031,9 +1031,7 @@ class Paper {
 /*
     // Display control points (for testing & debugging).
     l.shape.addCircle(fcx, fcy, 2, {fill: 'red'});
-*/
     l.shape.addCircle(tcx, tcy, 2, {fill: 'blue'});
-/*
     // Also connect center points by a silver line.
     l.shape.addPath([`M${ff.x},${ff.y}L${tf.x},${tf.y}`],
         {fill: 'none', stroke: 'silver'});
