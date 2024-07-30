@@ -1221,8 +1221,8 @@ class Paper {
       } else {
         if(MODEL.solved) r = VM.sig4Dig(fact.expression.result(MODEL.t));
       }
-      if(r) fact.shape.addText(x + hw - 4, y, r,
-          {'font-size': 9, fill: 'gray', 'text-anchor': 'right'});
+      if(r) fact.shape.addText(x + hw - 3, y + 1, r,
+          {'font-size': 8, fill: 'gray', 'text-anchor': 'end'});
     }
     // Highlight shape if needed.
     let filter = '';
