@@ -166,12 +166,9 @@ class UndoStack {
     if(['move', 'delete', 'drop', 'lift'].indexOf(action) >= 0) {
       ue.setSelection();
     }
-    // Set the properties of this undoable, depending on the type of action
+    // Set the properties of this undoable, depending on the type of action.
     if(action === 'move') {
-      // `args` holds the dragged node => store its ID and position
-      // NOTE: for factors, use their FactorPosition in the focal cluster
-      const obj = (args instanceof Factor ?
-          args.positionInFocalCluster : args);
+      // `args` holds the dragged node => store its ID and position.
       ue.properties = [args.identifier, args.x, args.y, 0, 0];
       // NOTE: object_id is NOT set, as dragged selection may contain
       // multiple entities
@@ -218,8 +215,6 @@ class UndoStack {
     // First get the dragged node
     let obj = MODEL.objectByID(ue.properties[0]); 
     if(obj) {
-      // For factors, use the x and y of the FactorPosition
-      if(obj instanceof Factor) obj = obj.positionInFocalCluster;
       // Calculate the relative move (dx, dy)
       const
           dx = ue.properties[1] - obj.x,
@@ -289,23 +284,9 @@ class UndoStack {
               tf = MODEL.factorByCode(tc);
           if(ff && tf) {
             MODEL.addLink(ff, tf, c).selected = false;
+            MODEL.cleanUpFeedbackLinks();
           } else {
             console.log('ERROR: Failed to add link from', fc, 'to', tc);
-          }
-        }
-      }
-      // Then restore factor positions.
-      // NOTE: These correspond to the factors that were part of the
-      // selection; all other factor positions are restored as part of their
-      // containing clusters
-      for(let i = 0; i < fpi.length; i++) {
-        c = n.childNodes[fpi[i]];
-        // Double-check that this node defines a factor position.
-        if(c.nodeName === 'factor-position') {
-          const f = MODEL.factorByCode(nodeParameterValue(c, 'code'));
-          if(f) {
-            f.selected = false;
-            MODEL.focal_cluster.addFactorPosition(f).initFromXML(c);
           }
         }
       }

@@ -52,10 +52,13 @@ class CLASTModel {
     this.focal_cluster = null;
     this.top_cluster = this.addCluster(UI.TOP_CLUSTER_NAME, UI.NO_ACTOR);
     this.focal_cluster = this.top_cluster;
-    
     this.actor_list = [];
-    this.orphan_list = [];
-    
+    // Inferred properties of graph: paths and cycles.
+    this.cycle_list = [];
+    this.path_matrix = {};
+    this.selected_cycle = -1;
+    this.show_all_cycles = false;
+
     // Model settings.
     this.grid_pixels = 20;
     this.align_to_grid = true;
@@ -88,7 +91,7 @@ class CLASTModel {
   /* METHODS THAT LOOKUP ENTITIES, OR INFER PROPERTIES */
 
   get simulationTime() {
-    // Return the simulated clock time for the current "tick" (= cycle).
+    // Return the simulated clock time for the current time step.
     return this.clock_time[this.t];
   }
   
@@ -284,47 +287,6 @@ class CLASTModel {
         this.links[UI.linkIdentifier(f2, f1)]);
   }
   
-  inferParentCluster(obj) {
-    // Find the best "parent" cluster for link `obj`.
-    const
-        p = obj.from_factor,
-        q = object.to_factor;
-    // Look for a cluster that shows both factors.
-    const
-        pcl = p.factorPositionClusters,
-        qcl = q.factorPositionClusters;
-    let c = null,
-        hc = null,
-        lnl = 100000;
-    // Look for shared parent cluster; meanwhile, keep track of the "highest"
-    // parent cluster of P, i.e., the cluster having the lowest nesting level
-    for(let i = 0; i < pcl.length; i++) {
-      const
-          pc = pcl[i],
-          nl = pc.nestingLevel;
-      if(nl < lnl) {
-        lnl = nl;
-        hc = pc;
-      }
-      if(qcl.indexOf(pc) >= 0) c = pc;
-      break;
-    }
-    if(!c) {
-      // Different clusters => focus on the "higher" cluster in the tree
-      c = hc;
-      for(let i = 0; i < qcl.length; i++) {
-        const
-            qc = qcl[i],
-            nl = qc.nestingLevel;
-        if(nl < lnl) {
-          lnl = nl;
-          c = qc;
-        }
-      }
-    }
-    return c;
-  }
-
   //
   //  Methods that add an entity to the model
   //
@@ -395,6 +357,7 @@ class CLASTModel {
       return null;
     }
     const f = new Factor(this.top_cluster, name, actor);
+    addDistinct(f, this.top_cluster.factors);
     if(node) f.initFromXML(node);
     f.setCode();
     this.factors[f.identifier] = f;
@@ -414,9 +377,6 @@ class CLASTModel {
     this.links[l.identifier] = l;
     from_f.outputs.push(l);
     to_f.inputs.push(l);
-    this.makePredecessorLists();
-    l.is_feedback = (from_f.predecessors.indexOf(to_f) >= 0);
-    if(l.is_feedback) this.cleanUpFeedbackLinks();
     return l;
   }
   
@@ -440,8 +400,8 @@ class CLASTModel {
           nbn = note.nearbyNode;
       note.nearby_pos = (nbn ? {node: nbn, oldx: nbn.x, oldy: nbn.y} : null);
     }
-    for(let i = 0; i < fc.factor_positions.length; i++) {
-      move = fc.factor_positions[i].alignToGrid() || move;
+    for(let i = 0; i < fc.factors.length; i++) {
+      move = fc.factors[i].alignToGrid() || move;
     }
     for(let i = 0; i < fc.sub_clusters.length; i++) {
       move = fc.sub_clusters[i].alignToGrid() || move;
@@ -453,9 +413,9 @@ class CLASTModel {
     // Move all entities in the focal cluster by (dx, dy) pixels.
     if(!dx && !dy) return;
     const fc = this.focal_cluster;
-    for(let i = 0; i < fc.factor_positions.length; i++) {
-      fc.factor_positions[i].x += dx;
-      fc.factor_positions[i].y += dy;
+    for(let i = 0; i < fc.factors.length; i++) {
+      fc.factors[i].x += dx;
+      fc.factors[i].y += dy;
     }
     for(let i = 0; i < fc.sub_clusters.length; i++) {
       fc.sub_clusters[i].x += dx;
@@ -508,7 +468,6 @@ class CLASTModel {
     const pl = [];
     for(let i = 0; i < this.selection.length; i++) {
       let obj = this.selection[i];
-      if(obj instanceof Factor) obj = obj.positionInFocalCluster;
       if(!(obj instanceof Link)) pl.push([obj.x, obj.y]);
     }
     return pl;
@@ -545,8 +504,8 @@ class CLASTModel {
     // then before drawing the diagram)
     const fc = this.focal_cluster;
     this.selection.length = 0;
-    for(let i = 0; i < fc.factor_positions.length; i++) {
-      const f = fc.factor_positions[i].factor;
+    for(let i = 0; i < fc.factors.length; i++) {
+      const f = fc.factors[i];
       if(f.selected) this.selection.push(f);
     }
     for(let i = 0; i < fc.sub_clusters.length; i++) {
@@ -582,12 +541,8 @@ class CLASTModel {
     for(let i = 0; i < this.selection.length; i++) {
       obj = this.selection[i];
       if(!(obj instanceof Link)) {
-        if(obj instanceof Factor) {
-          obj.movePositionInFocalCluster(dx, dy);
-        } else {
-          obj.x += dx;
-          obj.y += dy;
-        }
+        obj.x += dx;
+        obj.y += dy;
         minx = Math.min(minx, obj.x - obj.width / 2);
         miny = Math.min(miny, obj.y - obj.height / 2);
       }
@@ -621,9 +576,11 @@ class CLASTModel {
   
   eligibleFromToFactors() {
     // Return a list of factors that are visible in the focal cluster.
-    const ftf = [];
-    for(let i = 0; i < this.factor_positions.length; i++) {
-      ftf.push(this.factor_positions[i].factor);
+    const
+        fc = this.focal_cluster,
+        ftf = [];
+    for(let i = 0; i < fc.factors.length; i++) {
+      ftf.push(fc.factors[i]);
     }
     return ftf;
   }
@@ -710,32 +667,24 @@ class CLASTModel {
   
   dropSelectionIntoCluster(c) {
     // Move all selected nodes to cluster `c`.
-    let nf = 0,
-        nc = 0,
+    let n = 0,
         rmx = c.rightMarginX,
         tlc = this.topLeftCornerOfSelection,
         dx = rmx + 50 - tlc[0],
         dy = 50 - tlc[1];
     for(let i = 0; i < this.selection.length; i++) {
       const obj = this.selection[i];
-      if(obj instanceof Cluster) {
-        obj.setParent(c);
+      if(obj instanceof Cluster || obj instanceof Factor) {
+        obj.setCluster(c);
         obj.x += dx;
         obj.y += dy;
-        nc++;
-      } else if(obj instanceof Factor) {
-        // Create a placeholder for this factor (if it does not have one
-        // already -- this is checked for).
-        c.addFactorPosition(obj, obj.x + dx, obj.y + dy);
+        n++;
       }
       // NOTE: ignore selected links, as these will be "taken along"
       // automatically.
     }
-    if(nc + nf) {
-      const msgs = [];
-      if(nc) msgs.push(pluralS(nc, 'cluster') + ' moved');
-      if(nf) msgs.push(pluralS(nf, 'factor') + ' copied');
-      UI.notify(msgs.join(' and ') + ' to cluster ' + c.displayName);
+    if(n) {
+      UI.notify(pluralS(n, 'node') + ' moved to cluster ' + c.displayName);
     }
     // Clear the selection WITHOUT redrawing the selected entities
     // (as these will no longer be part of the graph)
@@ -793,9 +742,7 @@ class CLASTModel {
       if(l.from_node == node || l.to_node == node) this.deleteLink(l);
     }
     UI.removeShape(node.shape);
-    // Get list of ALL clusters containing the product
-    const fpc = node.factorPositionClusters;
-    for(let i = 0; i < fpc.length; i++) fpc[i].deleteFactor(node);
+    node.parent.deleteFactor(node);
     delete this.factors[node.identifier];
     // Now insert XML for node, so that the constraints will be restored properly
     UNDO_STACK.addXML(xml);
@@ -809,22 +756,22 @@ class CLASTModel {
     if(with_xml) UNDO_STACK.addXML(c.asXML);
     // Then delete all of its parts (appending their XML to the UndoEdit)
     let i;
-    // NOTE: Delete notes, product positions and subclusters in this cluster
+    // NOTE: Delete notes, factors and subclusters in this cluster
     // WITHOUT appending their XML, as this has already been generated as part
     // of the cluster's XML
     for(i = c.notes.length - 1; i >= 0; i--) {
       c.deleteNote(c.notes[i], false);
     }
-    for(i = c.factor_positions.length - 1; i >= 0; i--) {
-      c.deleteFactor(c.factor_positions[i].factor, false);
+    for(i = c.factors.length - 1; i >= 0; i--) {
+      c.deleteFactor(c.factors[i], false);
     }
     for(i = c.sub_clusters.length - 1; i >= 0; i--) {
       // NOTE: Recursive call, but lower level clusters will not output undo-XML.
       this.deleteCluster(c.sub_clusters[i], false); 
     }
     // Remove the cluster from its parent's subcluster list.
-    i = c.cluster.sub_clusters.indexOf(c);
-    if(i >= 0) c.cluster.sub_clusters.splice(i, 1);
+    i = c.parent.sub_clusters.indexOf(c);
+    if(i >= 0) c.parent.sub_clusters.splice(i, 1);
     UI.removeShape(c.shape);
     // Finally, remove the cluster from the model
     delete this.clusters[c.identifier];
@@ -841,6 +788,7 @@ class CLASTModel {
     // Finally, remove link from the model.
     UNDO_STACK.addXML(link.asXML);
     delete this.links[link.identifier];
+    this.cleanUpFeedbackLinks();
   }
 
   cleanUpActors() {
@@ -897,6 +845,7 @@ class CLASTModel {
   cleanUpFeedbackLinks() {
     // Set feedback property for all links that are part of a loop,
     // and return TRUE when a change has occurred.
+    this.buildPathMatrix();
     this.makePredecessorLists();
     let redraw = false;
     for(let k in this.links) if(this.links.hasOwnProperty(k)) {
@@ -907,6 +856,71 @@ class CLASTModel {
       redraw = redraw || (fb !== l.is_feedback);
     }
     if(redraw) UI.drawDiagram(this);
+  }
+  
+  pathAsString(c) {
+    // Return cycle (= list of factors) as a human-readable string.
+    return c.map((f) => f.displayName).join(UI.LINK_ARROW);
+  }
+
+  sproutPathsFrom(path) {
+    // Add paths to all nodes that stem from `path`.
+    const linksout = path[path.length - 1].outputs;
+    for(let i = 0; i < linksout.length; i++) {
+      const tf = linksout[i].to_factor;
+      const tfi = path.indexOf(tf);
+      // NOTE: Index = 0 indicates a cycle => add, but stop recursion.
+      if(tfi <= 0) {
+        // New path is existing path plus the TO factor of the link.
+        const p = path.slice();
+        p.push(tf);
+        this.path_matrix[p[0].identifier].push(p);
+        // If not in original path, recurse.
+        if(tfi < 0) this.sproutPathsFrom(p);
+      }
+    }
+  }
+  
+  buildPathMatrix() {
+    // Build a lookup with for each factor the list of all paths from
+    // this factor to some other factor.
+    this.path_matrix = {};
+    for(let k in this.factors) if(this.factors.hasOwnProperty(k)) {
+      const linksout = this.factors[k].outputs;
+      for(let j = 0 ; j < linksout.length; j++) {
+        const path = [];
+        path.push(this.factors[k]);
+        path.push(linksout[j].to_factor);
+        this.path_matrix[k] = [path];
+        // NOTE: New path may be a 2-factor cycle, and then we're done.
+        if(path[0] !== path[1]) this.sproutPathsFrom(path);
+      }
+    }
+    this.cycle_list.length = 0;
+    for(let k in this.path_matrix) if(this.path_matrix.hasOwnProperty(k)) {
+      const pl = this.path_matrix[k];
+      for(let i = 0; i < pl.length; i++) {
+        const p = pl[i];
+        if(p[0] === p[p.length - 1]) {
+          // Path begins and ends with same factor => add cycle unless
+          // identical to already recorded cycle.
+          let known = false;
+          for(let j = 0; j < this.cycle_list.length && !known; j++) {
+            const c = this.cycle_list[j];
+            known = (p.length === c.length && intersection(p, c).length === p.length);
+          }
+          if(!known) this.cycle_list.push(p);
+        }
+      }
+    }
+  }
+  
+  get cycleListStrings() {
+    const cls = [];
+    for(let i = 0; i < this.cycle_list.length; i++) {
+      cls.push(this.pathAsString(this.cycle_list[i]));
+    }
+    return cls.join('\n');
   }
   
   get triggerSequence() {
@@ -986,7 +1000,8 @@ class CLASTModel {
         }
       }
     }
-    // Then create all factors.
+    this.focal_cluster = this.top_cluster;
+    // Then create all factors -- first as nodes in the focal cluster.
     n = childNodeByTag(node, 'factors');
     if(n && n.childNodes) {
       for(let i = 0; i < n.childNodes.length; i++) {
@@ -1018,6 +1033,7 @@ class CLASTModel {
         }
       }
     }
+    // Only now make cluster hierarchy.
     n = childNodeByTag(node, 'clusters');
     if(n && n.childNodes) {
       for(let i = 0; i < n.childNodes.length; i++) {
@@ -1026,11 +1042,14 @@ class CLASTModel {
           const
               name = xmlDecoded(nodeContentByTag(c, 'name')),
               actor = xmlDecoded(nodeContentByTag(c, 'owner'));
+          
           this.addCluster(name, actor, c);
         }
       }
     }
     this.focal_cluster = this.top_cluster;
+    // Detect feedback links and cycles.
+    this.cleanUpFeedbackLinks();
     // Recompile expressions so that they refer to the correct entities.
     this.compileExpressions();
   }
@@ -1322,7 +1341,7 @@ class Note extends ObjectWithXYWH {
     this.height = safeStrToInt(nodeContentByTag(node, 'height'));
   }
 
-  setParent(pc) {
+  setCluster(pc) {
     // Place this note into the specified cluster `pc`.
     if(this.parent) {
       // Remove this note from its current parent's note list.
@@ -1543,7 +1562,7 @@ class NodeBox extends ObjectWithXYWH {
 class Cluster extends NodeBox {
   constructor(cluster, name, actor) {
     super(cluster, name, actor);
-    this.factor_positions = [];
+    this.factors = [];
     this.sub_clusters = [];
     this.notes = [];
   }
@@ -1565,7 +1584,7 @@ class Cluster extends NodeBox {
 
   get nestingLevel() {
     // Return the "depth" of this cluster in the cluster hierarchy
-    if(this.cluster) return this.cluster.nestingLevel + 1; // recursion!
+    if(this.parent) return this.parent.nestingLevel + 1; // recursion!
     return 0;
   }
   
@@ -1581,9 +1600,9 @@ class Cluster extends NodeBox {
       const c = this.sub_clusters[i];
       max = Math.max(max, c.x + c.width / 2);
     }
-    for(let i = 0; i < this.factor_positions.length; i++) {
-      const p = this.factor_positions[i];
-      max = Math.max(max, p.x + p.factor.width / 2);
+    for(let i = 0; i < this.factors.length; i++) {
+      const f = this.factors[i];
+      max = Math.max(max, f.x + f.factor.width / 2);
     }
     return max;
   }
@@ -1594,24 +1613,75 @@ class Cluster extends NodeBox {
         Math.abs(mpy - this.y) <= this.height / 2);
   }
   
-  connectionPoint(p) {
+  connectionPoint(p, tail) {
     const
         dx = p.x - this.x,
-        dy = p.y - this.y;
-    let angle;
-    if(Math.abs(dx) < VM.NEAR_ZERO) {
-      angle = (dy >= 0 ? 0.5 : 1.5) * Math.PI;
-    } else {
-      angle = Math.atan(dy / dx);
-      if(dx < 0) angle += Math.PI;
-    }
-    const
+        dy = p.y - this.y,
         hw = this.width / 2,
         hh = this.height / 2,
+        pi = Math.PI,
+        cp = {};
+    let dydx,
+        angle;
+    if(Math.abs(dx) < VM.NEAR_ZERO) {
+      dydx = 10000;
+      angle = (dy >= 0 ? 0.5 : 1.5) * pi;
+    } else {
+      dydx = dy / dx;
+      // For TAIL factors, transform the angle such that it "lingers"
+      // around the horizontal.
+      if(tail) {
+        dydx /= Math.pow(Math.abs(dx), 0.15);
+      } else {
+        dydx *= Math.pow(Math.abs(dy), 0.15);
+      }
+      angle = Math.atan(dydx);
+      if(dx < 0) angle += pi;
+    }
+    cp.fcos = Math.cos(angle);
+    cp.fsin = Math.sin(angle);
+    const
+        // Euclidean distance from other center point MINUS half width
+        // of this node and the other node (if known).
+        onhw = (p.hasOwnProperty('width') ? p.width / 2 : 0),
+        onhh = (p.hasOwnProperty('height') ? p.height / 2 : 0),
+        ed = Math.sqrt(dx*dx + dy*dy) -
+            Math.abs(cp.fcos) * (hw + onhw) -
+            Math.abs(cp.fsin) * (hh + onhh),
+        // Use one fourth of this Euclidean distance for the control
+        // point (relative to the connection point). 
+        cpm = Math.max(5, ed / 4),
+        // Relative connection point: assume point on ellipse that
+        // circumscribes the rectangle.
         r = Math.sqrt(hw*hw + hh*hh),
-        adx = Math.min(hw, Math.abs(r * Math.cos(angle))),
-        ady = Math.min(hh, Math.abs(r * Math.sin(angle)));
-    return {x: this.x + Math.sign(dx) * adx, y: this.y + Math.sign(dy) * ady};
+        // Then cut off at the rim of the rectangle.
+        adx = Math.min(hw, Math.abs(r * cp.fcos)),
+        ady = Math.min(hh, Math.abs(r * cp.fsin)),
+        sdx = Math.sign(dx),
+        sdy = Math.sign(dy);
+    cp.x = this.x + sdx * adx;
+    cp.y = this.y + sdy * ady;
+    // FROM node control points align with the line from the center.
+    cp.fcx = cp.x + cpm * cp.fcos;
+    cp.fcy = cp.y + cpm * cp.fsin;
+    // TO node control points are orthogonal to the rim of the rectangle,
+    // or at the true angle near the corners.
+    if(adx / hw > 0.9 && ady / hh > 0.9) {
+      const atan = Math.atan(dydx);
+      cp.tcos = Math.cos(atan) * sdx;
+      cp.tsin = Math.sin(atan) * sdx;
+    } else if(Math.abs(dydx) < 1) {
+      // Horizontal arrow.
+      cp.tcos = sdx;
+      cp.tsin = 0;
+    } else {
+      // Vertical arrow.
+      cp.tcos = 0;
+      cp.tsin = sdy;
+    }
+    cp.tcx = cp.x + cpm * cp.tcos;
+    cp.tcy = cp.y + cpm * cp.tsin;
+    return cp;
   }
 
   get asXML() {
@@ -1622,17 +1692,15 @@ class Cluster extends NodeBox {
         '</owner><x-coord>', this.x,
         '</x-coord><y-coord>', this.y,
         '</y-coord><comments>', cmnts,
-        '</comments><factor-positions>'].join('');
-    for(let i = 0; i < this.factor_positions.length; i++) {
-      xml += this.factor_positions[i].asXML;
+        '</comments><factor-codes>'].join('');
+    for(let i = 0; i < this.factors.length; i++) {
+      xml += `<factor-code>${this.factors[i].code}</factor-code>`;
     }
-    xml += '</factor-positions><notes>';
+    xml += '</factor-codes><notes>';
     for(let i = 0; i < this.notes.length; i++) {
       xml += this.notes[i].asXML;
     }
     xml += '</notes>';
-    // NOTE: Save sub-clusters AFTER factor positions, as FP coordinates
-    // may change when saving sub-clusters -- @@TO DO: find out where/why!
     xml += '<sub-clusters>';
     // NOTE: recursive call will capture entire sub-cluster hierarchy.
     for(let i = 0; i < this.sub_clusters.length; i++ ) {
@@ -1665,15 +1733,13 @@ class Cluster extends NodeBox {
         }
       }
     }
-    n = childNodeByTag(node, 'factor-positions');
+    n = childNodeByTag(node, 'factor-codes');
     if(n && n.childNodes) {
       for(let i = 0; i < n.childNodes.length; i++) {
         c = n.childNodes[i];
-        if(c.nodeName === 'factor-position') {
-          const
-              code = nodeParameterValue(c, 'code'),
-              f = MODEL.factorByCode(code);
-          if(f) this.addFactorPosition(f).initFromXML(c);
+        if(c.nodeName === 'factor-code') {
+          const f = MODEL.factorByCode(nodeContent(c));
+          if(f) f.setCluster(this);
         }
       }
     }
@@ -1692,7 +1758,7 @@ class Cluster extends NodeBox {
   }
   
   containsCluster(c) {
-    while(c && c !== this) c = c.cluster;
+    while(c && c !== this) c = c.parent;
     return c !== null;
   }
 
@@ -1700,45 +1766,21 @@ class Cluster extends NodeBox {
     // Place this cluster into the specified cluster `c`.
     // NOTE: cluster = NULL for the top cluster; this should never be altered.
     // NOTE: cluster cannot have itself as parent.
-    if(this.cluster && c !== this) {
+    if(this.parent && c !== this) {
       // Remove this cluster from its current parent's sub-cluster list
-      const i = this.cluster.sub_clusters.indexOf(this);
-      if(i >= 0) this.cluster.sub_clusters.splice(i, 1);
+      const i = this.parent.sub_clusters.indexOf(this);
+      if(i >= 0) this.parent.sub_clusters.splice(i, 1);
       // Set its new parent cluster pointer...
-      this.cluster = c;
+      this.parent = c;
       // ... and add it to the new parent cluster's sub-cluster list
       if(c.sub_clusters.indexOf(this) < 0) c.sub_clusters.push(this);
     }
   }
   
-  indexOfFactor(f) {
-    // Returns the last position of product `f` in this cluster.
-    let i = this.factor_positions.length - 1;
-    while(i >= 0 && this.factor_positions[i].factor !== f) i--;
-    return i;
-  }
-
-  addFactorPosition(f, x=null, y=null) {
-    // Add a factor position for factor `f` to this cluster unless such
-    // "fp" already exists, and then return this (new) factor position.
-    let fp = this.indexOfFactor(f);
-    if(fp >= 0) {
-      fp = this.factor_positions[fp];
-    } else {
-      fp = new FactorPosition(this, f);
-      if(x && y) {
-        fp.x = x;
-        fp.y = y;
-      }
-      this.factor_positions.push(fp);
-    }
-    return fp;
-  }
-
   containsFactor(f) {
     // Return the subcluster of this cluster that contains factor `f`,
     // or NULL if `f` does not occur in this cluster.
-    if(this.indexOfFactor(f) >= 0) return this;
+    if(f.parent === this) return this;
     for(let i = 0; i < this.sub_clusters.length; i++) {
       if(this.sub_clusters[i].containsFactor(f)) {
         return this.sub_clusters[i]; // recursion!
@@ -1766,8 +1808,7 @@ class Cluster extends NodeBox {
     const vl = [];
     for(let k in MODEL.links) if(MODEL.links.hasOwnProperty(k)) {
       const l = MODEL.links[k];
-      if(this.indexOfFactor(l.from_factor) >= 0 &&
-          this.indexOfFactor(l.to_factor) >= 0) {
+      if(l.from_factor.parent === this && l.to_factor.parent === this) {
         vl.push(l);
       }
     }
@@ -1801,7 +1842,7 @@ class Cluster extends NodeBox {
       if(la.indexOf(ff) >= 0 && la.indexOf(tf) >= 0) {
         // Link `l` connects two factors in this cluster.
         // Now determine the visible nodes for this link.
-        if(this.indexOfFactor(ff) >= 0) {
+        if(ff.parent === this) {
           // FROM factor is visible in this cluster.
           vff = ff;
         } else {
@@ -1816,7 +1857,7 @@ class Cluster extends NodeBox {
           if(vff) deep = true;
         }
         // Do likewise for the TO factor.
-        if(this.indexOfFactor(tf) >= 0) {
+        if(tf.parent === this) {
           // TO factor is visible in this cluster.
           vtf = tf;
         } else {
@@ -1861,8 +1902,8 @@ class Cluster extends NodeBox {
     // Return the set of all factors positioned in this cluster or one or
     // more of its subclusters.
     let facts = [];
-    for(let i = 0; i < this.factor_positions.length; i++) {
-      addDistinct(this.factor_positions[i].factor, facts);
+    for(let i = 0; i < this.factors.length; i++) {
+      addDistinct(this.factors[i], facts);
     }
     for(let i = 0; i < this.sub_clusters.length; i++) {
       mergeDistinct(this.sub_clusters[i].allFactors, facts); // recursion!
@@ -1892,30 +1933,6 @@ class Cluster extends NodeBox {
     return nn;
   }
 
-  deleteFactor(f, with_xml=true) {
-    // Remove "placeholder" of factor `f` from this cluster, and
-    // remove `f` from the model if there are no other clusters
-    // containing a "placeholder" for `f`.
-    // Always set "selected" attribute to FALSE (or the factor will
-    // still be drawn in red).
-    f.selected = false;
-    let i = this.indexOfFactor(f);
-    if(i < 0) return false;
-    // Append XML for factor positions unlesss deleting from a cluster
-    // that is being deleted.
-    if(with_xml) UNDO_STACK.addXML(this.factor_positions[i].asXML);
-    // Remove factor position of `f` in this cluster.
-    this.factor_positions.splice(i, 1);
-    // Do not delete factor from this cluster unless it has NO links to
-    // factors in other clusters
-    if(!f.allLinksInCluster(this)) return false;
-    // If no clusters contain `f`, delete it from the model entirely
-    // (incl. all links to and from `f`). NOTE: such deletions WILL
-    // append their undo XML.
-    MODEL.deleteFactor(f);
-    return true;
-  }
-
   deleteNote(n, with_xml=true) {
     // Remove note `n` from this cluster's note list.
     let i = this.notes.indexOf(n);
@@ -1926,16 +1943,6 @@ class Cluster extends NodeBox {
     return i > -1;
   }
 
-  positionFactors() {
-    for(let i = 0; i < this.factor_positions.length; i++) {
-      const
-          fp = this.factor_positions[i],
-          f = fp.factor;
-      f.x = fp.x;
-      f.y = fp.y;
-    }
-  }
-  
 }  // END of class Cluster
 
 
@@ -1948,6 +1955,8 @@ class Factor extends NodeBox {
     this.inputs = [];
     this.outputs = [];
     this.predecessors = [];
+    // The `visited` property is used when detecting cycles.
+    this.visited = false;
   }
 
   setCode() {
@@ -1961,14 +1970,6 @@ class Factor extends NodeBox {
   
   get typeLetter() {
     return 'F';
-  }
-  
-  get positionInFocalCluster() {
-    // Return factor position object for this factor if it is shown in the
-    // focal cluster, or NULL otherwise
-    let i = MODEL.focal_cluster.indexOfFactor(this);
-    if(i < 0) return null;
-    return MODEL.focal_cluster.factor_positions[i];
   }
   
   containsPoint(x, y) {
@@ -2058,22 +2059,6 @@ class Factor extends NodeBox {
     return `<em>Factor:</em> ${this.displayName}${extra}`;
   }
 
-  allLinksInCluster(c) {
-    // Return TRUE iff this factor is linked only to factors in
-    // cluster `c`.
-    // NOTE: If this is TRUE, deleting this factor from this cluster
-    // will delete it from the model as well.
-    for(let i = 0; i < this.inputs.length; i++) {
-      const ff = this.inputs[i].from_factor;
-      if(c.indexOfFactor(ff) < 0) return false;
-    }
-    for(let i = 0; i < this.outputs.length; i++) {
-      const tf = this.outputs[i].to_factor; 
-      if(c.indexOfFactor(tf) < 0) return false;
-    }
-    return true;
-  }
-  
   get allInputsAreFeedback() {
     // Return TRUE if all input links of this factor are feedback links.
     // NOTE: This is used to determine whether a factor is an implicit entry.
@@ -2083,24 +2068,36 @@ class Factor extends NodeBox {
     return true;
   }
 
+  setCluster(c) {
+    // Place this factor into the specified cluster `c`.
+    if(this.parent && c !== this) {
+      // Remove this factor from its current parent's factor list.
+      const i = this.parent.factors.indexOf(this);
+      if(i >= 0) this.parent.factors.splice(i, 1);
+      // Set its new parent cluster pointer...
+      this.parent = c;
+      // ... and add it to the new parent cluster's sub-cluster list
+      if(c.factors.indexOf(this) < 0) c.factors.push(this);
+    }
+  }
+  
   setPredecessors() {
     // Recursive function to create list of all factors that precede
     // this one.
     for(let i = 0; i < this.inputs.length; i++) {
-      const l = this.inputs[i];
-      if(!l.visited) {
-        l.visited = true;
-        const n = l.from_factor;
-        if(this.predecessors.indexOf(n) < 0) {
-          this.predecessors.push(n);
-        }
-        const pp = n.setPredecessors();  // Recursion!
-        for(let j = 0; j < pp.length; j++) {
-          const n = pp[j];
-          if(this.predecessors.indexOf(n) < 0) {
-            this.predecessors.push(n);
-          }
-        }
+      const
+          l = this.inputs[i],
+          v = l.visited,
+          ff = l.from_factor;
+      l.visited = true;
+      // Add the FROM factor as predecessor (if new).
+      if(this.predecessors.indexOf(ff) < 0) this.predecessors.push(ff);
+      // Recurse if FROM factor was not visited yet.
+      if(!v) ff.setPredecessors();
+      // Then also add all predecessors of the FROM factor (if new).
+      for(let j = 0; j < ff.predecessors.length; j++) {
+        const f = ff.predecessors[j];
+        if(this.predecessors.indexOf(f) < 0) this.predecessors.push(f);
       }
     }
     return this.predecessors;
@@ -2127,60 +2124,6 @@ class Factor extends NodeBox {
     this.resize();
   }
 
-  get factorPositionClusters() {
-    // Return the list of ALL clusters in which this factor is positioned.
-    const fpc = [];
-    for(let k in MODEL.clusters) if(MODEL.clusters.hasOwnProperty(k)) {
-      const c = MODEL.clusters[k];
-      if(c.indexOfFactor(this) >= 0) fpc.push(c);
-    }
-    return fpc;
-  }
-  
-  occursOutsideCluster(c) {
-    // Return TRUE iff this factor has a position in any cluster that is
-    // not `c` nor contained in `c`
-    for(let k in MODEL.clusters) if(MODEL.clusters.hasOwnProperty(k)) {
-      const cc = MODEL.clusters[k];
-      if((cc !== c) && !c.containsCluster(cc) && (cc.indexOfFactor(this) >= 0)) {
-        return true;
-      }
-    }
-    return false;
-  }
-
-  setPositionInFocalCluster(x=null, y=null) {
-    // Set X and Y of this factor to its position in the focal cluster
-    // (OPTIONAL: after changing it to specified values `x` and `y`).
-    const i = MODEL.focal_cluster.indexOfFactor(this);
-    if(i < 0) return null;
-    const fp = MODEL.focal_cluster.factor_positions[i];
-    // Set new factor position coordinates if specified.
-    if(x && y) {
-      fp.x = x;
-      fp.y = y;
-    }
-    // Set factor's X and Y to its position in the focal cluster.
-    this.x = fp.x;
-    this.y = fp.y;
-    return fp;
-  }
-
-  movePositionInFocalCluster(dx, dy) {
-    // Set X and Y of this factor to its position in the focal cluster
-    // after changing it (relative to current position).
-    const i = MODEL.focal_cluster.indexOfFactor(this);
-    if(i < 0) return null;
-    const fp = MODEL.focal_cluster.factor_positions[i];
-    // Set new factor position coordinates.
-    fp.x += dx;
-    fp.y += dy;
-    // Set factor's X and Y to its position in the focal cluster.
-    this.x = fp.x;
-    this.y = fp.y;
-    return fp;
-  }
-
   copyPropertiesFrom(f) {
     // Set properties to be identical to those of factor `f`
     this.x = f.x;
@@ -2198,40 +2141,6 @@ class Factor extends NodeBox {
   }
   
 } // END of class Factor
-
-
-// CLASS FactorPosition (placeholder for a factor within a cluster).
-class FactorPosition {
-  constructor(cluster, factor) {
-    this.cluster = cluster;
-    this.factor = factor;
-    this.x = factor.x;
-    this.y = factor.y;
-  }
-  
-  get asXML() {
-    return ['<factor-position code="', this.factor.code,
-      '"><x-coord>', this.x,
-      '</x-coord><y-coord>', this.y,
-      '</y-coord></factor-position>'].join('');
-  }
-
-  initFromXML(node) {
-    this.x = safeStrToInt(nodeContentByTag(node, 'x-coord'));
-    this.y = safeStrToInt(nodeContentByTag(node, 'y-coord'));
-  }
-  
-  alignToGrid() {
-    const ox = this.x, oy = this.y;
-    const gr = MODEL.grid_pixels;
-    this.x = Math.round((this.x + 0.49999999*gr) / gr) * gr;
-    this.y = Math.round((this.y + 0.49999999*gr) / gr) * gr;
-    this.factor.x = this.x;
-    this.factor.y = this.y;
-    return Math.abs(this.x - ox) > VM.NEAR_ZERO || Math.abs(this.y - oy) > VM.NEAR_ZERO;
-  }
-
-} // END of class FactorPosition
 
 
 // CLASS Link
@@ -2303,11 +2212,8 @@ class Link {
   get visibleNodes() {
     // Returns tuple [from, to] where TRUE indicates that this node is
     // visible in the focal cluster.
-    const
-        fc = MODEL.focal_cluster,
-        fv = (fc.indexOfFactor(this.from_factor) >= 0),
-        tv = (fc.indexOfFactor(this.to_factor) >= 0);
-    return [fv, tv];
+    const fc = MODEL.focal_cluster;
+    return [this.from_factor.parent === fc, this.to_factor.parent === fc];
   }
   
   get containsSelected() {
@@ -2322,6 +2228,22 @@ class Link {
       if(this.deep_links[i].is_feedback) return true;
     }
     return false;
+  }
+  
+  get cycleNumbers() {
+    // Return list of indices in the cycle list if link is part of
+    // such a cycle.
+    // NOTE: Limit cycle set if modeler is viewing cycles selectively.
+    const cn = [];
+    for(let i = 0; i < MODEL.cycle_list.length; i++) {
+      if(MODEL.show_all_cycles || i === MODEL.selected_cycle) {
+        const
+            c = MODEL.cycle_list[i],
+            ffi = c.indexOf(this.from_factor);
+        if(ffi >= 0 && c.lastIndexOf(this.to_factor) === ffi + 1) cn.push(i);
+      }
+    }
+    return cn;
   }
   
   inList(list) {

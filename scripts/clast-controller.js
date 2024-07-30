@@ -206,7 +206,7 @@ class Controller {
     this.node_btns = ['factor', 'cluster', 'link', 'note'];
     this.edit_btns = ['clone', 'paste', 'delete', 'undo', 'redo'];
     this.model_btns = ['settings', 'save', 'savediagram', 'finder',
-        'actors', 'monitor', 'solve'];
+        'actors', 'monitor', 'cycle', 'solve'];
     this.other_btns = ['new', 'load', 'documentation',
         'parent', 'lift', 'solve', 'stop', 'reset', 'zoomin', 'zoomout',
         'stepback', 'stepforward', 'autosave', 'recall'];
@@ -232,7 +232,7 @@ class Controller {
     // Initialize "main" modals, i.e., those that relate to the controller,
     // not to other dialog objects.
     const main_modals = ['model', 'load', 'settings', 'actors', 'actor',
-        'add-node', 'add-link', 'move', 'note', 'clone',
+        'add-node', 'edit-link', 'move', 'note', 'clone',
         'expression'];
     for(let i = 0; i < main_modals.length; i++) {
       this.modals[main_modals[i]] = new ModalDialog(main_modals[i]);
@@ -626,6 +626,9 @@ class Controller {
     this.buttons.finder.addEventListener('click', tdf);
     this.buttons.monitor.addEventListener('click', tdf);
     this.buttons.documentation.addEventListener('click', tdf);
+    // Cycle button.
+    this.buttons.cycle.addEventListener('click',
+        () => UI.highlightCycle(event));
     // Cluster hierarchy navigation elements:
     this.focal_name.addEventListener('click',
         () => UI.showClusterPropertiesDialog(MODEL.focal_cluster));
@@ -737,7 +740,7 @@ class Controller {
     this.modals['add-node'].cancel.addEventListener('click',
         () => UI.cancelAddNode());
     this.modals['add-node'].element('expression').addEventListener('click',
-        () => UI.editFactorExpression());
+        () => UI.editEntityExpression());
 
     this.modals.note.ok.addEventListener('click',
         () => UI.addNode('note'));
@@ -748,14 +751,14 @@ class Controller {
     this.modals.clone.cancel.addEventListener('click',
         () => UI.cancelCloneSelection());
 
-    // ADD LINK modal appears when a link is drawn or double-clicked.
-    this.modals['add-link'].ok.addEventListener('click',
-        () => UI.addOrUpdateLink());
-    this.modals['add-link'].cancel.addEventListener('click',
-        () => UI.modals['add-link'].hide());
+    // EDIT LINK modal appears when a link is drawn or double-clicked.
+    this.modals['edit-link'].ok.addEventListener('click',
+        () => UI.updateLink());
+    this.modals['edit-link'].cancel.addEventListener('click',
+        () => UI.cancelEditLink());
     // The "edit" button opens the Expression Editor for the link multiplier.
-    document.getElementById('add-link-edit').addEventListener(
-        'click', () => UI.editLinkMultiplier());
+    document.getElementById('edit-link-edit').addEventListener(
+        'click', () => UI.editEntityExpression());
 
     // The MOVE dialog can appear when a factor or cluster is added.
     this.modals.move.ok.addEventListener('click',
@@ -921,7 +924,7 @@ class Controller {
     // Display cycle tick `t` as the current cycle number.
     document.getElementById('step').innerText = t;
     document.getElementById('clock-time').innerHTML =
-        `&#x231A;${this.clockTime(MODEL.simulationTime)}`;
+        `${this.clockTime(MODEL.simulationTime)}`;
   }
   
   stopSolving() {
@@ -1295,7 +1298,7 @@ class Controller {
       // cluster containing no factors, or when a link between the nodes
       // exists (in either direction).
       if(node === UI.from_node ||
-          (node instanceof Cluster && !node.factor_positions.length) ||
+          (node instanceof Cluster && !node.factors.length) ||
           MODEL.areLinked(UI.from_node, node)) {
         UI.to_node = null;
           rim.style.cursor = 'not-allowed';
@@ -1334,7 +1337,7 @@ class Controller {
       // Only permit connecting from a factor or from a cluster having
       // sub-factors.
       if(node instanceof Factor ||
-          (node instanceof Cluster && node.factor_positions.length)) {
+          (node instanceof Cluster && node.factors.length)) {
         UI.from_node = node;
         UI.to_node = null;
         document.onmouseup = stopMakeConnection;
@@ -1355,7 +1358,6 @@ class Controller {
       let tp = {x: UI.mouse_x, y: UI.mouse_y};
       // ... unless the cursor is over a suitable node.
       let tn = UI.to_node;
-      if(tn instanceof Factor) tn.setPositionInFocalCluster();
       if(tn) tp = tn.connectionPoint(UI.from_node);
       const fp = UI.from_node.connectionPoint(tp);
       UI.paper.dragLineToCursor(fp, tp);
@@ -1424,6 +1426,7 @@ class Controller {
         this.drawObject(l.to_factor);
         this.drawObject(l);
       }
+      MODEL.cleanUpFeedbackLinks();
     }
     // Terminate the connection process.
     this.connection_to_make = null;
@@ -1673,11 +1676,11 @@ class Controller {
     if(fc.relatedLinks.indexOf(this.link_under_cursor) >= 0) {
       this.on_link = this.link_under_cursor;
     }
-    for(let i = fc.factor_positions.length-1; i >= 0; i--) {
-      const fp = fc.factor_positions[i].factor.setPositionInFocalCluster();
-      if(fp.factor.containsPoint(this.mouse_x, this.mouse_y)) {
-        this.on_node = fp.factor;
-        this.on_factor = fp.factor;
+    for(let i = fc.factors.length-1; i >= 0; i--) {
+      const f = fc.factors[i];
+      if(f.containsPoint(this.mouse_x, this.mouse_y)) {
+        this.on_node = f;
+        this.on_factor = f;
         break;
       }
     }
@@ -1896,11 +1899,11 @@ class Controller {
         const
             ol = [],
             fc = MODEL.focal_cluster,
-            fpl = fc.factor_positions;
-        for(let i = 0; i < fpl.length; i++) {
-          const fp = fpl[i].factor.setPositionInFocalCluster();
-          if(fp.x >= tlx && fp.x <= brx && fp.y >= tly && fp.y < bry) {
-            ol.push(fp.factor);
+            fl = fc.factors;
+        for(let i = 0; i < fl.length; i++) {
+          const f = fl[i];
+          if(f.x >= tlx && f.x <= brx && f.y >= tly && f.y < bry) {
+            ol.push(f);
           }
         }
         for(let i = 0; i < fc.sub_clusters.length; i++) {
@@ -1990,28 +1993,24 @@ class Controller {
     this.updateCursorPosition(e);
     const
         id = e.dataTransfer.getData('text'),
-        f = MODEL.factors[id];
-    if(f && MODEL.focal_cluster.indexOfFactor(f) < 0) e.preventDefault();
-    const c = MODEL.clusters[id];
-    if(c && MODEL.focal_cluster.sub_clusters.indexOf(f) < 0) e.preventDefault();
+        obj = MODEL.factors[id] || MODEL.clusters[id];
+    if(obj && obj.parent !== MODEL.focal_cluster) e.preventDefault();
   }
 
   drop(e) {
-    // Prompt to move the factor that is being dragged from the Finder
+    // Prompt to move the object that is being dragged from the Finder
     // to the focal cluster at the cursor position.
     const
         id = e.dataTransfer.getData('text'),
-        f = MODEL.factors[id];
-    if(f && MODEL.focal_cluster.indexOfFactor(f) < 0) {
+        obj = MODEL.factors[id] || MODEL.clusters[id];
+    if(obj && obj.parent !== MODEL.focal_cluster) {
       e.preventDefault();
-      MODEL.addFactorPosition(f, this.add_x, this.add_y);
-    } else {
-      const c = MODEL.clusters[id];
-      if(c && MODEL.focal_cluster.sub_clusters.indexOf(c) < 0) {
-        e.preventDefault();
-        this.confirmToMoveCluster(c);
+      if(obj instanceof Cluster) {
+        this.confirmToMoveCluster(obj.parent);
+      } else {
+        this.confirmToMoveFactor(obj.parent);
       }
-    }
+    } else
     // NOTE: Update afterwards, as the modeler may target a precise (X, Y).
     this.updateCursorPosition(e);
   }
@@ -2494,15 +2493,21 @@ class Controller {
       }
       type = md.element('type').innerText;
       if(type === 'factor') {
-        const
-            full_name = nn + (an ? ` (${an})` : UI.NO_ACTOR),
-            pf = MODEL.objectByName(full_name);
         n = MODEL.addFactor(nn, an);
         if(n) {
-          if(pf) {
-            this.notify(`Added existing factor <em>${pf.displayName}</em>`);
+          // If factor, and X and Y are set, it exists; then if not in the
+          // focal cluster, ask whether to move it there.
+          if(n instanceof Factor && (n.x !== 0 || n.y !== 0)) {
+            if(n.parent !== MODEL.focal_cluster) {
+              this.confirmToMoveNode(n);
+            } else {
+              this.warningEntityExists(n);
+            }
+          } else {
+            n.x = this.add_x;
+            n.y = this.add_y;
+            UNDO_STACK.push('add', n);
           }
-          MODEL.focal_cluster.addFactorPosition(n, this.add_x, this.add_y);
         }
       } else {
         n = MODEL.addCluster(nn, an);
@@ -2543,32 +2548,32 @@ class Controller {
     }
   }
   
-  confirmToMoveCluster(n) {
-    // Store cluster `n` in global variable, and open confirm dialog
+  confirmToMoveNode(n) {
+    // Store node `n` in global variable, and open confirm dialog
     const md = this.modals.move;
-    this.cluster_to_move = n;
-    md.element('cluster-name').innerHTML = n.displayName;
+    this.node_to_move = n;
+    md.element('node-name').innerHTML = n.displayName;
     md.element('from-parent').innerHTML = n.parent.displayName;
     md.element('to-parent').innerHTML = MODEL.focal_cluster.displayName;
     md.show();  
   }
   
-  doNotMoveCluster() {
-    // Cancel the "move cluster to focal cluster" operation.
-    this.cluster_to_move = null;
+  doNotMoveNode() {
+    // Cancel the "move node to focal cluster" operation.
+    this.node_to_move = null;
     this.modals.move.hide(); 
   }
   
-  moveClusterToFocalCluster() {
-    // Perform the "move cluster to focal cluster" operation.
-    const c = this.cluster_to_move;
-    this.cluster_to_move = null;
+  moveNodeToFocalCluster() {
+    // Perform the "move node to focal cluster" operation.
+    const n = this.node_to_move;
+    this.node_to_move = null;
     this.modals.move.hide();
     // TO DO: prepare for undo -> keep track of the old parent cluster.
-    c.setParent(MODEL.focal_cluster);
-    c.x = this.add_x;
-    c.y = this.add_y;
-    this.selectNode(c);
+    n.setCluster(MODEL.focal_cluster);
+    n.x = this.add_x;
+    n.y = this.add_y;
+    this.selectNode(n);
   }
   
   promptForCloning() {
@@ -3023,6 +3028,37 @@ console.log('HERE name conflicts', name_conflicts, mapping);
   }
   
   //
+  // Highlighting loops
+  //
+  
+  highlightCycle(event) {
+    // Highlight next cycle (if any) or all cycles when Alt-key is pressed.
+    const nc = MODEL.cycle_list.length;
+    if(!nc) {
+      this.notify('Model appears to contain no loops');
+      MODEL.show_all_cycles = false;
+      MODEL.selected_cycle = -1;
+      return;
+    }
+    if(event.altKey) {
+      MODEL.show_all_cycles = !MODEL.show_all_cycles;
+      MODEL.selected_cycle = -1;
+    } else {
+      MODEL.show_all_cycles = false;
+      if(MODEL.selected_cycle < 0) {
+        MODEL.selected_cycle = 0;
+      } else if(event.shiftKey) {
+        MODEL.selected_cycle--;
+        if(MODEL.selected_cycle < 0) MODEL.selected_cycle = nc - 1;
+      } else {
+        MODEL.selected_cycle++;
+        if(MODEL.selected_cycle >= nc) MODEL.selected_cycle = 0;        
+      }
+    }
+    this.drawDiagram(MODEL);
+  }
+  
+  //
   // Interaction with modal dialogs to modify model or entity properties
   //
   
@@ -3147,15 +3183,70 @@ console.log('HERE name conflicts', name_conflicts, mapping);
     md.hide();
   }
 
-  editFactorExpression() {    
+  editEntityExpression() {    
     X_EDIT.editExpression(this.edited_object);
   }
   
-  showLinkPropertiesDialog(l) {
-    // NOTE: The link properties modal is the Expression Editor.
-    this.edited_object = l;
-    X_EDIT.editExpression(l);
+  showLinkPropertiesDialog() {
+    // Show the edit link properties modal.
+    if(!(this.on_link && this.on_link instanceof Link)) return;
+    const
+        md = this.modals['edit-link'],
+        link = this.on_link,
+        ln = md.element('name'),
+        icon = md.element('icon'),
+        lm = md.element('multiplier'),
+        eb = md.element('edit'),
+        x = link.expression;
+    this.edited_object = this.on_link;
+    ln.innerText = link.displayName;
+    lm.value = x.text;
+    eb.title = x.text;
+    let ic = 'undefined';
+    if(x.defined) {
+      if(x.isStatic) {
+        const r = x.result(0);
+        if(Math.abs(r) > VM.NEAR_ZERO) {
+          ic = (r === -1 ? 'decrease' : (r === 1 ? 'increase' : 'constant'));
+        }
+      } else {
+        ic = 'formula';
+      }
+    }
+    icon.src = `images/${ic}.png`;
+    icon.title = `(${ic})`;
+    md.show('multiplier');
   }
   
+  updateLink() {
+    // Checks whether expression is valid, and if so, updates the link.
+     const
+        md = this.modals['edit-link'],
+        link = this.on_link,
+        ln = md.element('name'),
+        icon = md.element('icon'),
+        lm = md.element('multiplier'),
+        eb = md.element('edit'),
+        x = link.expression;
+   
+    this.edited_object = false;
+    md.hide();
+  }
+  
+  cancelEditLink() {
+    // Not only hides the node modal, but also clears the edited object.
+    const
+        md = this.modals['edit-link'],
+        link = this.edited_object;
+    if(link instanceof Link) {
+      // Restore orgiginal expression text.
+      const x = link.expression;
+      x.text = md.element('edit').title;
+      x.reset();
+    }
+    this.edited_object = false;    
+    md.hide();
+  }
+
 } // END of class Controller
 

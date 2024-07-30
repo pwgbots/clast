@@ -45,7 +45,7 @@ SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
     // Create global variables
     var
       // Version number
-      CLAST_VERSION = '0.1.1',
+      CLAST_VERSION = '0.1.2',
       // GitHub repository
       GITHUB_REPOSITORY = 'https://github.com/pwgbots/clast',
       // Create the XML parser
@@ -168,6 +168,8 @@ SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
            title="View simulation monitor (Ctrl-M)">
       <img id="documentation-btn" class="btn enab" src="images/info.png"
            title="View information and documentation (Ctrl-I)">
+      <img id="cycle-btn" class="btn enab" src="images/cycle.png"
+           title="Highlight next loop (if any)">
     </div>
     <!-- if diagram is not the TOP cluster, show a button to move up to its parent -->
     <div id="focal-cluster">
@@ -220,7 +222,10 @@ SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
         <td id="step-sep">
           <img id="stepforward-btn" class="sbtn senab" src="images/forward.png">
         </td>
-        <td id="clock-time">
+        <td>
+          <img id="clock" src="images/clock.png">
+        </td>
+        <td id="clock-time"></td>
         <td id="issue-panel">
           <span id="prev-issue">&#x25C1;</span>
           <span id="issue-nr"></span>
@@ -438,19 +443,22 @@ and move the cursor over the status bar">
     </div>
   </div>
 
-  <!-- The ADD LINK dialog allows editing the multiplier on a link. -->
-  <div id="add-link-modal" class="modal">
-    <div id="add-link-dlg" class="inp-dlg">
+  <!-- The EDIT LINK dialog allows editing the multiplier on a link. -->
+  <div id="edit-link-modal" class="modal">
+    <div id="edit-link-dlg" class="inp-dlg">
       <div class="dlg-title">
         Multiplier for
-        <div id="add-link-name"></div>
+        <div id="edit-link-name"></div>
         <img class="cancel-btn" src="images/cancel.png">
         <img class="ok-btn" src="images/ok.png">
       </div>
-      <div id="add-link-multiplier-lbl">Multiplier:</div>
-      <input id="add-link-multiplier" type="text"
-             placeholder="(1 for +, -1 for -, etc.)" autocomplete="off">
-      <img id="add-link-edit" src="images/edit.png" class="sbtn enab">
+      <div id="edit-link-multiplier-lbl">Multiplier:</div>
+      <img id="edit-link-icon" src="images/undefined.png" title="(undefined)">
+      <input id="edit-link-multiplier" type="text"
+             title="Type 1 for &oplus;, or -1 for &ominus;
+0 (or blank) denote &ldquo;undefined&rdquo;"
+             autocomplete="off">
+      <img id="edit-link-edit" src="images/edit.png" class="sbtn enab">
     </div>
   </div>
   
@@ -497,8 +505,8 @@ and move the cursor over the status bar">
         Confirm move
       </div>
       <div id="move-msg">
-        Really move factor
-        <em><span id="move-factor-name"></span></em>
+        Really move
+        <em><span id="move-node-name"></span></em>
         from cluster <strong><span id="move-from-parent"></span></strong>
         to this cluster <strong><span id="move-to-parent"></span></strong>?
       </div>

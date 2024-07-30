@@ -680,6 +680,48 @@ div.dragger {
   height: min-content;
 }
 
+/* styles for the EDIT LINK dialog */
+#edit-link-dlg {
+  width: 270px;
+  height: 45px;
+}
+
+#edit-link-name {
+  display: inline-block;
+  max-width: 145px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  vertical-align: bottom;
+  margin-bottom: -0.5px;
+}
+
+#edit-link-multiplier-lbl {
+  position: absolute;
+  left: 2px;
+  top: 25px;
+}
+
+#edit-link-icon {
+  position: absolute;
+  left: 60px;
+  top: 25px;
+  width: 16px;
+  height: 16px;
+}
+
+#edit-link-multiplier {
+  position: absolute;
+  left: 85px;
+  top: 24px;  
+  width: 160px;
+}
+
+#edit-link-edit {
+  position: absolute;
+  right: 1px;
+  top: 24px;  
+}
+
 /* LOAD modal dialog */
 #load-dlg {
   width: 430px;
@@ -1119,7 +1161,7 @@ img.inline-cancel-btn {
   bottom: auto;
   display: inline-block;
   max-height: 120px;
-  overflow: scroll;
+  overflow-y: auto;
 }
 
 #sub-factors-from-lbl,

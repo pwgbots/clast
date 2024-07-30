@@ -199,9 +199,8 @@ class Finder {
         // Clusters "occur" in their parent cluster.
         if(se.parent) occ.push(se.parent.identifier);
       } else if(se instanceof Factor) {
-        // Factors "occur" in clusters where they have a placeholder.
-        const fl = se.factorPositionClusters;
-        for(let i = 0; i < fl.length; i++) occ.push(fl[i].identifier);
+        // Factors "occur" in their parent cluster.
+        occ.push(se.parent.identifier);
       } else if(se instanceof Actor) {
         // Actors "occur" in factors and clusters for which they are the
         // "owner".
