@@ -151,8 +151,6 @@ class Shape {
   }
 
   addCircle(x, y, r, attrs) {
-console.log('HERE', x, y);
-if(isNaN(x)) throw "x is NaN";
     // Add a circle with center point (x, y) and radius r.
     const el = UI.paper.newSVGElement('circle');
     el.setAttribute('cx', x);
