@@ -810,11 +810,11 @@ class Paper {
   //  Auxiliary methods used while drawing shapes
   //
   
-  arc(r, srad, erad) {
-    // Return SVG path code for an arc having radius `r`, start angle `srad`,
-    // and end angle `erad`.
-    return 'a' + [r, r, 0, 0, 1, r * Math.cos(erad) - r * Math.cos(srad),
-        r * Math.sin(erad) - r * Math.sin(srad)].join(',');
+  arc(rh, rv, srad, erad) {
+    // Return SVG path code for an elliptic arc having horiontal radius `rh`,
+    // vertical radius `rv`, start angle `srad`, and end angle `erad`.
+    return 'a' + [rh, rv, 0, 0, 1, rh * (Math.cos(erad) - Math.cos(srad)),
+        rv * (Math.sin(erad) - Math.sin(srad))].join(',');
   }
 
   bezierPoint(a, b, c, d, t) {
@@ -1114,7 +1114,21 @@ class Paper {
     // Draw frame.
     clstr.shape.addRect(x, y, w, h,
         {fill: fill_color, stroke: stroke_color,
-            'stroke-width': stroke_width, 'stroke-dasharray': UI.sda.dot});
+            'stroke-width': stroke_width, 'stroke-dasharray': UI.sda.dash});
+    // Add angles indicating hidden links (if any).
+    const io = clstr.hiddenIO;
+    if(io.in.length) {
+      clstr.shape.addPath(['M', x - (w/2 + 3), ',', y - 0.4 * h,
+          'l0,-', 0.1 * h + 3, 'l', 0.1 * w + 3, ',0'],
+              {fill: 'none', stroke: stroke_color,
+                  'stroke-width': stroke_width / 2});
+    }
+    if(io.out.length) {
+      clstr.shape.addPath(['M', x + (w/2 + 3), ',', y + 0.4 * h,
+          'l0,', 0.1 * h + 3, 'l-', 0.1 * w + 3, ',0'],
+              {fill: 'none', stroke: stroke_color,
+                  'stroke-width': stroke_width / 2});
+    }
     // Add overlay with rim to permit linking to this cluster.
     const rim = clstr.shape.addRect(x, y, w, h,
         {stroke: this.palette.transparent, 'stroke-width': 9,
@@ -1189,6 +1203,24 @@ class Paper {
     // Draw frame using colors as defined above.
     fact.shape.addEllipse(x, y, hw, hh, {fill: fill_color,
         stroke: stroke_color, 'stroke-width': stroke_width});
+    // Add arcs indicating hidden links (if any).
+    const
+        io = fact.hiddenIO,
+        pi = Math.PI;
+    if(io.in.length) {
+      const ap = this.arc(hw + 3, hh + 3, pi * 0.35, pi * 0.15);
+      fact.shape.addPath(['M', x - (hw + 3) * Math.cos(pi * 0.15), ',',
+          y - (hh + 3 * hh/hw) * Math.sin(pi * 0.15), ap],
+              {fill: 'none', stroke: stroke_color,
+                  'stroke-width': stroke_width / 2});
+    }
+    if(io.out.length) {
+      const ap = this.arc(hw + 3, hh + 3, pi * 2.15, pi * 2.35);
+      fact.shape.addPath(['M', x - (hw + 3) * Math.cos(pi * 1.15), ',',
+          y - (hh + 3 * hh/hw) * Math.sin(pi * 1.15), ap],
+              {fill: 'none', stroke: stroke_color,
+                  'stroke-width': stroke_width / 2});
+    }
     // Add actor color inner rim.
     fact.shape.addEllipse(x, y, hw - 2.5, hh - 2.5,
         {stroke: fact.actor.color, 'stroke-width': 4, fill: 'none',

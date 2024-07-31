@@ -1517,7 +1517,7 @@ class NodeBox extends ObjectWithXYWH {
         ow = this.width,
         oh = this.height,
         an = (this.hasActor ? this.actor.name : ''),
-        ratio = (this instanceof Cluster ? 0.3 : 0.5);
+        ratio = (this instanceof Cluster ? 0.4 : 0.5);
     this.name_lines = nameToLines(this.name, an, ratio);
     this.bbox = UI.textSize(this.name_lines + '\n' + an, 10);
     if(this instanceof Factor) {
@@ -1531,7 +1531,7 @@ class NodeBox extends ObjectWithXYWH {
       this.width = Math.max(CONFIGURATION.min_cluster_width,
           this.frame_width + 20);
       this.height = Math.max(this.bbox.height + 20,
-          this.width * Math.sqrt(3) / 2);
+          this.width * 0.75);
     }
     return this.width != ow || this.height != oh;
   }
@@ -1554,7 +1554,7 @@ class NodeBox extends ObjectWithXYWH {
     }
     return nn;
   }
-
+  
 } // END of class NodeBox
 
 
@@ -1893,6 +1893,29 @@ class Cluster extends NodeBox {
     return dvl;
   }
 
+  get hiddenIO() {
+    // Return list pair {in, out} with input and output links of this cluster
+    // that are not showing in the diagram.
+    const
+        af = this.allFactors,
+        apf = this.parent.allFactors,
+        io = {in: [], out: []};
+    for(let k in MODEL.links) if(MODEL.links.hasOwnProperty(k)) {
+      const
+          l = MODEL.links[k],
+          fi = af.indexOf(l.from_factor),
+          fpi = apf.indexOf(l.from_factor),
+          ti = af.indexOf(l.to_factor),
+          tpi = apf.indexOf(l.to_factor);
+      if(fi >= 0 && tpi < 0) {
+        io.out.push(l);
+      } else if(ti >= 0 && fpi < 0) {
+        io.in.push(l);
+      }
+    }
+    return io;
+  }
+
   containsLink(l) {
     // Returns TRUE iff link `l` is related to some factor in this cluster.
     return this.relatedLinks.indexOf(l) >= 0;
@@ -2057,6 +2080,27 @@ class Factor extends NodeBox {
       extra += `<code style="color: gray"> &#x225C; ${x.text}</code>`;
     }
     return `<em>Factor:</em> ${this.displayName}${extra}`;
+  }
+
+  get hiddenIO() {
+    // Return list pair {in, out} with input and output links of this factor
+    // that are not showing in the diagram.
+    const
+        af = this.parent.allFactors,
+        io = {in: [], out: []};
+    for(let i = 0; i < this.inputs.length; i++) {
+      const
+          l = this.inputs[i],
+          fi = af.indexOf(l.from_factor);
+      if(fi < 0) io.in.push(l);
+    }
+    for(let i = 0; i < this.outputs.length; i++) {
+      const
+          l = this.outputs[i],
+          ti = af.indexOf(l.to_factor);
+      if(ti < 0) io.out.push(l);
+    }
+    return io;
   }
 
   get allInputsAreFeedback() {
