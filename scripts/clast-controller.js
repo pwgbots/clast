@@ -1815,16 +1815,16 @@ class Controller {
     if(this.active_button) {
       this.add_x = this.mouse_x;
       this.add_y = this.mouse_y;
-      const obj = this.active_button.id.split('-')[0];
+      const type = this.active_button.id.split('-')[0];
       if(!this.stayActive) this.resetActiveButton();
       this.edited_object = null;
-      if(obj === 'factor' || obj === 'cluster') {
+      if(type === 'factor' || type === 'cluster') {
         setTimeout(() => {
               const md = UI.modals['add-node'];
-              md.element('type').innerText = obj;
+              md.element('type').innerText = type;
               UI.showNodePropertiesDialog();
             });
-      } else if(obj === 'note') {
+      } else if(type === 'note') {
         setTimeout(() => {
               const md = UI.modals.note;
               md.element('action').innerHTML = 'Add';
@@ -2263,6 +2263,7 @@ class Controller {
       MODEL.t = Math.max(0, MODEL.t - dt);
       UI.updateTimeStep();
       UI.drawDiagram(MODEL);
+      MONITOR.updateDialog();
     }
   }
   
@@ -2273,6 +2274,7 @@ class Controller {
       MODEL.t = Math.min(MODEL.run_length, MODEL.t + dt);
       UI.updateTimeStep();
       UI.drawDiagram(MODEL);
+      MONITOR.updateDialog();
     }
   }
   
@@ -3069,7 +3071,9 @@ console.log('HERE name conflicts', name_conflicts, mapping);
     md.element('name').value = model.name;
     md.element('author').value = model.author;
     md.element('grid-pixels').value = model.grid_pixels;
-    md.element('cycles').value = model.run_length;
+    md.element('time-scale').value = model.time_scale;
+    md.element('time-unit').value = model.time_unit;
+    md.element('steps').value = model.run_length;
     this.setBox('settings-align-to-grid', model.align_to_grid);
     md.show('name');
   }
@@ -3079,22 +3083,35 @@ console.log('HERE name conflicts', name_conflicts, mapping);
     // Valdidate inputs
     const px = this.validNumericInput('settings-grid-pixels', 'grid resolution');
     if(px === false) return false;
-    const rl = this.validNumericInput('settings-cycles', 'run length');
+    const ts = this.validNumericInput('settings-time-scale', 'time step');
+    if(ts === false) return false;
+    const rl = this.validNumericInput('settings-steps', 'run length');
     if(rl === false) return false;
     model.name = md.element('name').value.trim();
     // Display model name in browser unless blank
     document.title = model.name || 'CLAST';
     model.author = md.element('author').value.trim();
-    // Some changes may necessitate redrawing the diagram.
+    // Some changes may necessitate resetting the model or redrawing the diagram.
     let cb = UI.boxChecked('settings-align-to-grid'),
-        redraw = !model.align_to_grid && cb;
+        redraw = !model.align_to_grid && cb,
+        reset = (ts != model.time_scale);
+    const tu = md.element('time-unit').value;
+    reset = reset || (tu != model.time_unit);
+    model.time_unit = (tu || CONFIGURATION.default_time_unit);
     model.align_to_grid = cb;
+    model.time_scale = ts;
     model.grid_pixels = Math.floor(px);
     model.run_length = Math.max(1, Math.floor(rl));
     // Close the dialog.
     md.hide();
     // Ensure that model documentation can no longer be edited.
     DOCUMENTATION_MANAGER.clearEntity([model]);
+    // Reset model if needed
+    if(reset) {
+      model.resetExpressions();
+      //CHART_MANAGER.updateDialog();
+      redraw = true;
+    }
     if(redraw) this.drawDiagram(model);
   }
   

@@ -173,6 +173,19 @@ class Shape {
     this.element.appendChild(el);
     return el;
   }
+  
+  addImage(x, y, w, h, url) {
+    // Add an image with top left corner (x, y) and specified width, height and
+    // source URL.
+    const el = UI.paper.newSVGElement('image');
+    el.setAttribute('x', x);
+    el.setAttribute('y', y);
+    el.setAttribute('width', w);
+    el.setAttribute('height', h);
+    el.setAttribute('href', url);
+    this.element.appendChild(el);
+    return el;
+  }
 
   addSVG(x, y, attrs) {
     // Add an SVG subelement with top-left (x, y) and specified attributes.
@@ -521,7 +534,7 @@ class Paper {
     const
         ns = '' + number,
         fh = this.font_heights[fsize],
-        fw = fh / 2;
+        fw = fh / 2.5;
     let w = 0, m = 0;
     // Approximate the width of the Unicode characters representing
     // special values
@@ -999,18 +1012,23 @@ class Paper {
         path = [`M${x1},${y1}C${fcx},${fcy},${tcx},${tcy},${x2},${y2}`];
         
     // For feedback links, add (multi-color) thick lines.
-    if(l.is_feedback) {
-      const
-          cn = l.cycleNumbers,
-          n = cn.length;
-      for(let i = 0; i < n; i++) {
-        const
-            str = this.palette.cycle[cn[i] % 8],
-            opa = Math.min(1, 0.4 + Math.floor(cn[i] / 8) * 0.25),
-            sda = this.cycle_sda[n][i];
-        l.shape.addPath(path, {fill: 'none', stroke: str, opacity: opa,
-            'stroke-width': 7, 'stroke-dasharray': sda});
+    let cn = [];
+    if(l.containsFeedback) {
+      for(let i = 0; i < l.deep_links.length; i++) {
+        const dl = l.deep_links[i];
+        if(dl.is_feedback) mergeDistinct(dl.cycleNumbers, cn);
       }
+    } else if(l.is_feedback) {
+      cn = l.cycleNumbers;
+    }
+    const n = cn.length;
+    for(let i = 0; i < n; i++) {
+      const
+          str = this.palette.cycle[cn[i] % 8],
+          opa = Math.min(1, 0.4 + Math.floor(cn[i] / 8) * 0.25),
+          sda = this.cycle_sda[n][i];
+      l.shape.addPath(path, {fill: 'none', stroke: str, opacity: opa,
+          'stroke-width': 7, 'stroke-dasharray': sda});
     }
     // Draw a thick but near-transparent line so that the mouse
     // events is triggered sooner.
@@ -1063,26 +1081,30 @@ class Paper {
       // if this is not 1 or -1.
       const
           r = l.expression.result(MODEL.t),
-          sign = '-0+'.charAt(Math.sign(r) + 1),
           bp = this.bezierPointAtDistanceFromHead(
                 [x1, y1], [fcx, fcy], [tcx, tcy], [x2, y2], 15);
       l.shape.addCircle(bp[0], bp[1], 5, {stroke: stroke_color,
           'stroke-width': 0.6, fill: 'white'});
-      l.shape.addText(bp[0], bp[1] - 1, sign,
-          {'font-size': 10, 'font-weight': 700, fill: 'black'});
+      l.shape.addPath(['M', bp[0] - 2.75, ',', bp[1], 'l5.5,0'],
+          {stroke: 'black', 'stroke-width': 1.5, fill: 'none',
+              'stroke-linecap': 'round'});
+      if(r > 0) l.shape.addPath(['M', bp[0], ',', bp[1] - 2.75, 'l0,5.5'],
+          {stroke: 'black', 'stroke-width': 1.5, fill: 'none',
+              'stroke-linecap': 'round'});
       if(Math.abs(Math.abs(r) - 1) > VM.NEAR_ZERO) {
         const
             s = VM.sig4Dig(r),
             nbb = this.numberSize(s, 9),
             bw = nbb.width + 4,
             bh = nbb.height + 2,
-            bp = this.bezierPoint(
-                  [x1, y1], [fcx, fcy], [tcx, tcy], [x2, y2], 0.8);
+            bp = this.bezierPointAtDistanceFromHead(
+                [x1, y1], [fcx, fcy], [tcx, tcy], [x2, y2], 35);
         l.shape.addRect(bp[0], bp[1], bw, bh,
             {stroke: '#80a0ff', 'stroke-width': 0.5, fill: '#d0f0ff'});
-        l.shape.addNumber(bp[0], bp[1], s, {'font-size': 9,
-            'fill': (r <= VM.ERROR || r >= VM.EXCEPTION ?
-                this.palette.VM_error : '#0000a0')});
+        l.shape.addNumber(bp[0], bp[1], s,
+            {'font-size': 9, 'font-family': 'MPlus', 'font-weight': 'bold',
+                'fill': (r <= VM.ERROR || r >= VM.EXCEPTION ?
+                    this.palette.VM_error : '#0000a0')});
       }
     }
     // Highlight shape if it has comments.
@@ -1242,17 +1264,27 @@ class Paper {
               'font-style': 'italic'});
     }
     if(fact.expression.defined) {
-      let r = '';
+      const r = fact.expression.result(MODEL.t);
+      let s = '';
       if(fact.expression.isStatic) {
-        r = VM.sig4Dig(fact.expression.result(0));
-        // Display lock symbol on the left.
-        fact.shape.addText(x - hw + 8, y, '\u{1F512}',
-            {'font-size': 9, fill: 'black'});
+        s = VM.sig4Dig(r);
+        // Display constant symbol on the left.
+        fact.shape.addImage(x - hw + 4, y - 8, 16, 16, 'images/constant.png');
       } else {
-        if(MODEL.solved) r = VM.sig4Dig(fact.expression.result(MODEL.t));
+        if(MODEL.solved) s = VM.sig4Dig(r);
+        // Display formula symbol on the left.
+        fact.shape.addImage(x - hw + 4, y - 8, 16, 16, 'images/formula.png');
       }
-      if(r) fact.shape.addText(x + hw - 3, y + 1, r,
-          {'font-size': 8, fill: 'gray', 'text-anchor': 'end'});
+      if(s) {
+        const te = fact.shape.addText(x, y - hh + 6, r,
+            {'font-size': 9, 'font-family': 'MPlus', 'font-weight': 'bold'});
+        if(r <= VM.ERROR || r >= VM.EXCEPTION) {
+          te.setAttribute('fill', '#c00000');
+          te.setAttribute('font-weight', 'bold');
+        } else {
+          te.setAttribute('fill', '#0000c0');
+        }
+      }
     }
     // Highlight shape if needed.
     let filter = '';

@@ -70,7 +70,7 @@ class Monitor {
   updateTickNumber(t) {
     // Display progres as tick number / run length.
     document.getElementById('monitor-ticks').innerText =
-        `Cycle #${t} (of ${MODEL.run_length})`;
+        `Time step #${t} (of ${MODEL.run_length})`;
   }
   
   updateDialog() {

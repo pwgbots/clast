@@ -700,7 +700,7 @@ class ExpressionParser {
     }
     // A minus is monadic if at the start of the expression, or NOT preceded
     // by a "constant symbol", a number, or a closing parenthesis `)`.
-    // Constant symbols are cycle number 'c', clock time 'now', 'random',
+    // Constant symbols are time step number 't', clock time 'now', 'random',
     // 'true', 'false', 'pi', and 'infinity'
     if(DYADIC_CODES.indexOf(this.sym) === DYADIC_OPERATORS.indexOf('-') &&
         (this.prev_sym === null ||
@@ -1255,45 +1255,27 @@ class VirtualMachine {
     MONITOR.updateDialog();
     UI.startSolving();
     // Start iterating throught the simulation period.
-    setTimeout(() => VM.runCycle(), 10);
+    setTimeout(() => VM.runTimeStep(), 10);
   }
   
-  runCycle() {
+  runTimeStep() {
     if(this.t > MODEL.run_length) {
       this.terminateRun();
       return;
     }
-    this.logMessage(this.t, 'Cycle #' + this.t);
-    let new_time = '';
-    if(this.t > 0) {
-      if(this.event_setpoints.length) {
-        // Advance to the next relevant point in time, and remove it
-        // from the list of event setpoints.
-        this.event_setpoints.sort();
-        MODEL.clock_time[this.t] = this.event_setpoints.shift();
-        new_time = UI.clockTime(MODEL.clock_time[this.t]);
-      } else {
-        // Time does not advance.
-        MODEL.clock_time[this.t] = MODEL.clock_time[this.t - 1];
-      }
-    }
+    this.logMessage(this.t, 'Time step #' + this.t);
     const changes = [];
     for(let k in this.sequence) if(this.sequence.hasOwnProperty(k)) {
       const s = this.sequence[k];
-      for(let j = 0; j < s.length; j++) {
-        const uas = s[j].updateState(VM.t);
-        if(uas) {
-          changes.push(`${s[j].displayName}: ${s[j].stateChanges(VM.t)}`);        
-        }
+      for(let i = 0; i < s.length; i++) {
+        changes.push(`${s[i].displayName} evaluates as ${s[i].expression.result(VM.t)}`);        
       }
     }
-    this.logMessage(this.t, pluralS(changes.length, 'state change'));
+    this.logMessage(this.t, pluralS(changes.length, 'factor') + ' evaluated:');
     if(changes.length) {
       changes.sort();
       this.logMessage(this.t, '- ' + changes.join('\n- '));
     }
-    if(new_time) this.logMessage(this.t, '\nClock time advanced to ' +
-            new_time + '\n');
     MONITOR.updateDialog();
     MONITOR.updateMonitorTime();
     UI.setProgressNeedle(this.t / MODEL.run_length);
@@ -1305,11 +1287,11 @@ class VirtualMachine {
       this.terminateRun();
       return;
     }
-    // Otherwise, increase the cycle "tick"...
+    // Otherwise, increase the time step number...
     this.t++;
-    // ... and proceed asynchronously with the next cycle, so the process
+    // ... and proceed asynchronously with the next time step, so the process
     // can be interrupted by the modeler.
-    setTimeout(() => VM.runCycle(), 10);
+    setTimeout(() => VM.runTimeStep(), 10);
   }
   
   terminateRun() {
@@ -1392,7 +1374,7 @@ function VMI_push_time_step(x) {
   // NOTE: This is the "local" time step for expression `x` (which always
   // starts at 1), adjusted for the first time step of the simulation period.
   const t = x.step[x.step.length - 1]; 
-  if(DEBUGGING) console.log('push cycle number c = ' + t);
+  if(DEBUGGING) console.log('push time step number t = ' + t);
   x.push(t);
 }
 
@@ -2325,7 +2307,7 @@ const
   SEPARATOR_CHARS = PARENTHESES + OPERATOR_CHARS + "[ '",
   COMPOUND_OPERATORS = ['!=', '<>', '>=', '<='],
   CONSTANT_SYMBOLS = [
-      'c', 'now', 'last',
+      't', 'now',
       'random', 'true', 'false',
       'pi', 'infinity', '#',
       'yr', 'wk', 'd', 'h',
@@ -2336,7 +2318,7 @@ const
       VMI_push_pi, VMI_push_infinity, VMI_push_contextual_number,
       VMI_push_year, VMI_push_week, VMI_push_day, VMI_push_hour,
       VMI_push_minute, VMI_push_second],
-  DYNAMIC_SYMBOLS = ['c', 'now', 'random'],
+  DYNAMIC_SYMBOLS = ['t', 'now', 'random'],
   MONADIC_OPERATORS = [
       '~', 'not', 'abs', 'sin', 'cos', 'atan', 'ln',
       'exp', 'sqrt', 'round', 'int', 'fract', 'min', 'max',

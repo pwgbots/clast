@@ -52,7 +52,7 @@ class ExpressionEditor {
 <p>Names of factors and links must be enclosed by brackets, e.g.,
   <code>[xyz]</code> or <code>[a${UI.LINK_ARROW}b]</code>,
   to distinguish them from pre-defined variables
-  (<code title="Cycle number (starts at 1)">c</code>,
+  (<code title="Time step number (starts at 0)">t</code>,
   <code title="Simulated clock time (in hours)">now</code>,
   <code title="A random number from the uniform distribution U(0, 1)">random</code>)
   and constants

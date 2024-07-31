@@ -62,6 +62,8 @@ class CLASTModel {
     // Model settings.
     this.grid_pixels = 20;
     this.align_to_grid = true;
+    this.time_scale = 1;
+    this.time_unit = CONFIGURATION.default_time_unit;
     this.run_length = 10;
     this.last_zoom_factor = 1;
     
@@ -92,7 +94,12 @@ class CLASTModel {
 
   get simulationTime() {
     // Return the simulated clock time for the current time step.
-    return this.clock_time[this.t];
+    return this.t * this.timeStepDuration;
+  }
+  
+  get timeStepDuration() {
+    // Return duration of 1 time step in hours.
+    return this.time_scale * VM.time_unit_values[this.time_unit];
   }
   
   get newFactorCode() {
@@ -980,6 +987,8 @@ class CLASTModel {
     this.last_zoom_factor = safeStrToFloat(
         nodeParameterValue(node, 'zoom'), 1);
     this.align_to_grid = nodeParameterValue(node, 'align-to-grid') === '1';
+    this.time_scale = safeStrToFloat(nodeParameterValue(node, 'time-scale'), 1);
+    this.time_unit = nodeParameterValue(node, 'time-unit') || 'hour';
     this.run_length = safeStrToInt(nodeParameterValue(node, 'run-length'), 10);
     this.name = xmlDecoded(nodeContentByTag(node, 'name'));
     this.author = xmlDecoded(nodeContentByTag(node, 'author'));
@@ -1057,7 +1066,10 @@ class CLASTModel {
   get asXML() {
     let p = [' next-factor-number="', this.next_factor_number,
         '" zoom="', this.last_zoom_factor,
-        '" run-length="', this.run_length, '"'].join('');
+        '" run-length="', this.run_length,
+        '" time-scale="', this.time_scale,
+        '" time-unit="', this.time_unit,
+        '"'].join('');
     if(this.align_to_grid) p += ' align-to-grid="1"';
     let xml = this.xml_header + ['<model', p, '><name>',  xmlEncoded(this.name),
         '</name><author>', xmlEncoded(this.author),
@@ -1602,7 +1614,7 @@ class Cluster extends NodeBox {
     }
     for(let i = 0; i < this.factors.length; i++) {
       const f = this.factors[i];
-      max = Math.max(max, f.x + f.factor.width / 2);
+      max = Math.max(max, f.x + f.width / 2);
     }
     return max;
   }

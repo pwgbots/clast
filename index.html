@@ -383,10 +383,25 @@ and move the cursor over the status bar">
           </td>
         </tr>
         <tr>
+          <td colspan="2">Time step:&nbsp;
+            <input id="settings-time-scale" type="text" autocomplete="off"
+                   style="width:50px">
+            <select id="settings-time-unit"
+                    style="height:20px;font-size:12px;vertical-align:top">
+              <option value="year">year</option>
+              <option value="week">week</option>
+              <option value="day">day</option>
+              <option value="hour" selected="selected">hour</option>
+              <option value="minute">minute</option>
+              <option value="second">second</option>
+            </select>
+          </td>
+        </tr>
+        <tr>
           <td colspan="2">
             Run length:
-            <input id="settings-cycles" type="text" autocomplete="off"
-                   style="width: 40px; text-align: center"> cycles
+            <input id="settings-steps" type="text" autocomplete="off"
+                   style="width: 40px; text-align: center"> time steps
           </td>
         </tr>
       </table>
@@ -500,13 +515,13 @@ and move the cursor over the status bar">
 
   <!-- The MOVE modal asks to confirm to move node to focal cluster -->
   <div id="move-modal" class="modal">
-    <div id="move-dlg" class="inp-dlg">
-      <div class="dlg-title" style="background-color: #cc88b0">
+    <div id="move-dlg" class="inp-dlg" style="border-color: #e84800">
+      <div class="dlg-title" style="background-color: #f0c880">
         Confirm move
       </div>
       <div id="move-msg">
-        Really move
-        <em><span id="move-node-name"></span></em>
+        Really move factor
+        <em><span id="move-factor-name"></span></em>
         from cluster <strong><span id="move-from-parent"></span></strong>
         to this cluster <strong><span id="move-to-parent"></span></strong>?
       </div>
@@ -653,8 +668,8 @@ where X can be one or several of these letters: ACFL
   <!-- the CALL STACK modal shows the VM's expression call stack
        when an error has occurred -->
   <div id="call-stack-modal" class="modal">
-    <div id="call-stack-dlg" class="inp-dlg">
-      <div class="dlg-title" style="background-color: #cc88b0">
+    <div id="call-stack-dlg" class="inp-dlg" style="border-color: #e84800">
+      <div class="dlg-title" style="background-color: #f0c880">
         <div id="call-stack-error"></div>
         <img id="call-stack-close-btn" class="close-btn" src="images/close.png">
       </div>
