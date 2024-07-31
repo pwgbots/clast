@@ -1429,10 +1429,6 @@ img.finder {
   max-width: 99vw;
 }
 
-#monitor-tabs {
-  width: calc(100% - 5px);
-}
-
 #monitor-clear-btn {
   color: #603000;
   background-color: white;
@@ -1451,6 +1447,12 @@ img.finder {
   height: calc(100% - 45px);
   font: 12px monospace;
   border: 1px solid Black;
+}
+
+#monitor-ticks {
+  position: absolute;
+  bottom: 4px;
+  left: 3px;
 }
 
 #monitor-timer {

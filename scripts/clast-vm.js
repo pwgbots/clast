@@ -1268,10 +1268,12 @@ class VirtualMachine {
     for(let k in this.sequence) if(this.sequence.hasOwnProperty(k)) {
       const s = this.sequence[k];
       for(let i = 0; i < s.length; i++) {
-        changes.push(`${s[i].displayName} evaluates as ${s[i].expression.result(VM.t)}`);        
+        s[i].updateStatus(VM.t);
+        changes.push(`"${s[i].displayName} has state ` +
+            VM.sig4Dig(s[i].status[VM.t]));
       }
     }
-    this.logMessage(this.t, pluralS(changes.length, 'factor') + ' evaluated:');
+    this.logMessage(this.t, pluralS(changes.length, 'factor') + ' updated:');
     if(changes.length) {
       changes.sort();
       this.logMessage(this.t, '- ' + changes.join('\n- '));

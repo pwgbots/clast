@@ -941,7 +941,10 @@ class CLASTModel {
         seq = [];
     let n = 0;
     for(let i = af.length - 1; i >= 0; i--) {
-      if(af[i].isEntry) al.push(af.splice(i, 1)[0]);
+      const f = af[i];
+      if(!f.inputs.length || (f.expression.defined && f.expression.isStatic)) {
+        al.push(af.splice(i, 1)[0]);
+      }
     }
     while(al.length) {
       const pl = al.slice();
@@ -949,7 +952,10 @@ class CLASTModel {
       n++;
       al.length = 0;
       for(let i = af.length - 1; i >= 0; i--) {
-        if(af[i].inputs.indexOf(pl) >= 0) al.push(af.splice(i, 1)[0]);
+        const f = af[i];
+        for(let j = 0; j < f.inputs.length; j++) {
+          if(pl.indexOf(f.inputs[j].from_factor) >= 0) al.push(af.splice(i, 1)[0]);
+        }
       }
     }
     if(af.length) {
@@ -1168,8 +1174,12 @@ class CLASTModel {
     for(let i = 0; i < ax.length; i++) {
       ax[i].reset(VM.UNDEFINED);
     }
+    // Initialized status vector of all factors as "undefined".
+    for(let k in this.factors) if(this.factors.hasOwnProperty(k)) {
+      MODEL.cleanVector(this.factors[k].status, VM.UNDEFINED);
+    }
   }
-
+  
   compileExpressions() {
     // Compile all expression attributes of all model entities
     const ax = this.allExpressions;
@@ -1992,6 +2002,9 @@ class Factor extends NodeBox {
     this.predecessors = [];
     // The `visited` property is used when detecting cycles.
     this.visited = false;
+    // Factors have a status vector containing either -1, 0, +1
+    // an error code, or "not computed".
+    this.status = [];
   }
 
   setCode() {
@@ -2189,13 +2202,56 @@ class Factor extends NodeBox {
   }
   
   isActive(t) {
-    return false;
+    if(!MODEL.solved) return false;
+    const s = (t < 0 ? VM.UNDEFINED : this.status[t]);
+    return s !== VM.UNDEFINED && s !== 0;
   }
 
   activated(t) {
-    return false;
+    if(!MODEL.solved) return false;
+    const s = (t < 0 ? VM.UNDEFINED : this.status[t]);
+    return s !== VM.UNDEFINED && s !== 0 && (t <= 0 || s !== this.status[t - 1]);
   }
   
+  updateStatus(t) {
+    // Set value for this factor. If no expression is specified, this value
+    // is inferred from the incoming links; otherwise it is the expression
+    // result for time step `t`.
+    let s = VM.UNDEFINED;
+    if(this.expression.defined) {
+      s = this.expression.result(t);
+    } else {
+      s = 0;
+      for(let i = 0; i < this.inputs.length; i++) {
+        const l = this.inputs[i];
+        if(l.expression.defined) {
+          const r = l.expression.result(t);
+          if(r <= VM.ERROR) {
+            s = r;
+          } else if(r < VM.EXCEPTION) {
+            // NOTE: Treat exceptions as if the link multiplier is undefined.
+            const
+                ff = l.from_factor,
+                fs = ff.status[t],
+                fx = ff.expression,
+                fr = (fs && fs !== VM.UNDEFINED ? fs : (fx.defined ? fx.result(t) : 0)); 
+            if(fr <= VM.ERROR) {
+              s = fr;
+            } else if(fr < VM.EXCEPTION) {
+              // Add sign of result, so each link contributes either -1, 0 or +1.
+              s += Math.sign(r * fr);
+            }
+          }
+console.log('HERE r s', r, s, l.displayName);
+        }
+      }
+      // Normalize result to either -1, 0 or +1.
+      if(s > VM.ERROR) s = Math.sign(s);
+    }
+    // Update the status vector for time step `t`.
+    this.status[t] = s;
+  }
+
 } // END of class Factor
 
 

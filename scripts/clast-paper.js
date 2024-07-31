@@ -1215,7 +1215,7 @@ class Paper {
     // Active states have a dark green rim.
     if(active) {
       stroke_width = 1.5;
-      stroke_color = fact.activeColor(MODEL.t);
+      stroke_color = this.palette.active_rim;
     }
     // Being selected overrules special border properties except SDA
     if(fact.selected) {
@@ -1265,15 +1265,24 @@ class Paper {
     }
     if(fact.expression.defined) {
       const r = fact.expression.result(MODEL.t);
-      let s = '';
+      let s = '',
+          img = '';
       if(fact.expression.isStatic) {
         s = VM.sig4Dig(r);
-        // Display constant symbol on the left.
-        fact.shape.addImage(x - hw + 4, y - 8, 16, 16, 'images/constant.png');
+        if(r === 1)  {
+          img = 'increase';
+        } else if(r === -1) {
+          img = 'decrease';
+        } else {
+          img = 'constant';
+        }
       } else {
         if(MODEL.solved) s = VM.sig4Dig(r);
-        // Display formula symbol on the left.
-        fact.shape.addImage(x - hw + 4, y - 8, 16, 16, 'images/formula.png');
+        img = 'formula';
+      }
+      if(img) {
+        // Display symbol in the left lobe of the ellipse.
+        fact.shape.addImage(x - hw + 4, y - 8, 16, 16, `images/${img}.png`);
       }
       if(s) {
         const te = fact.shape.addText(x, y - hh + 6, r,
