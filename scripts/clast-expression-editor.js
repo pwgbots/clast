@@ -53,6 +53,7 @@ class ExpressionEditor {
   <code>[xyz]</code> or <code>[a${UI.LINK_ARROW}b]</code>,
   to distinguish them from pre-defined variables
   (<code title="Time step number (starts at 0)">t</code>,
+  <code title="Duration of 1 time step (in hours)">dt</code>,
   <code title="Simulated clock time (in hours)">now</code>,
   <code title="A random number from the uniform distribution U(0, 1)">random</code>)
   and constants

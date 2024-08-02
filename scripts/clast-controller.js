@@ -282,20 +282,20 @@ class Controller {
         multi = [],
         lines = string.split('\n'),
         ll = lines.length,
-        // If no paper, assume 144 px/inch, so 1 pt = 2 px
+        // If no paper, assume 144 px/inch, so 1 pt = 2 px.
         fh = (this.paper ? this.paper.font_heights[fsize] : 2 * fsize),
         scalar = fh / 2;
     for(let i = 0; i < ll; i++) {
-      // NOTE: interpret two spaces as a "non-breaking" space
+      // NOTE: Interpret two spaces as a "non-breaking" space.
       const words = lines[i].replace(/  /g, '\u00A0').trim().split(/ +/);
-      // Split words at '-' when wider than width
+      // Split words at '-' when wider than width.
       for(let j = 0; j < words.length; j++) {
         if(words[j].length * scalar > width) {
           const sw = words[j].split('-');
           if(sw.length > 1) {
-            // Replace j-th word by last fragment of split string
+            // Replace j-th word by last fragment of split string.
             words[j] = sw.pop();
-            // Insert remaining fragments before
+            // Insert remaining fragments before.
             while(sw.length > 0) words.splice(j, 0, sw.pop() + '-');
           }
         }
@@ -311,7 +311,7 @@ class Controller {
               nw = Math.floor(nl.length * scalar);
           multi.push(nl);
           // If width of added line exceeds the given width, adjust width
-          // so that following lines fill out better
+          // so that following lines fill out better.
           width = Math.max(width, nw);
           line = words[j] + ' ';
         } else {
@@ -320,7 +320,7 @@ class Controller {
       }
       line = line.trim();
       // NOTE: Chrome and Safari ignore empty lines in SVG text; as a workaround,
-      // we add a non-breaking space to lines containing only whitespace
+      // we add a non-breaking space to lines containing only whitespace.
       if(!line) line = '\u00A0';
       multi.push(line);
     }
@@ -752,13 +752,22 @@ class Controller {
         () => UI.cancelCloneSelection());
 
     // EDIT LINK modal appears when a link is drawn or double-clicked.
-    this.modals['edit-link'].ok.addEventListener('click',
-        () => UI.updateLink());
-    this.modals['edit-link'].cancel.addEventListener('click',
-        () => UI.cancelEditLink());
+    const md = this.modals['edit-link'];
+    md.ok.addEventListener('click', () => UI.updateLink());
+    md.cancel.addEventListener('click', () => UI.cancelEditLink());
     // The "edit" button opens the Expression Editor for the link multiplier.
-    document.getElementById('edit-link-edit').addEventListener(
-        'click', () => UI.editEntityExpression());
+    md.element('edit').addEventListener('click', () => UI.editEntityExpression());
+    // The "icon" button shows the link multiplier menu.
+    md.element('icon').addEventListener('mouseover', () => UI.showMultiplierMenu());
+    const
+        mm = md.element('menu'),
+        sm = (event) => UI.selectMultiplier(event);
+    // Each image child node can be clicked.
+    for(let i = 0; i < mm.childNodes.length; i++) {
+      mm.childNodes[i].addEventListener('click', sm);
+    }
+    // Moving cursor back over the dialog hides the menu.
+    md.dialog.addEventListener('mouseenter', () => UI.hideMultiplierMenu());
 
     // The MOVE dialog can appear when a factor or cluster is added.
     this.modals.move.ok.addEventListener('click',
@@ -1292,7 +1301,7 @@ class Controller {
     rim.onmousedown = rimMouseDown;
 
     function rimMouseOver() {
-      // Do not respond when linkins is not enabled.
+      // Do not respond when linking is not enabled.
       if(!UI.canLink()) return;
       // Do not respond when connecting from the same node, or from a
       // cluster containing no factors, or when a link between the nodes
@@ -1427,6 +1436,10 @@ class Controller {
         this.drawObject(l);
       }
       MODEL.cleanUpFeedbackLinks();
+    } else if(ctm.ffact) {
+      // Incomplete connection => redraw the FROM object, as it will
+      // still have its purple nimbus.
+      this.drawObject(ctm.ffact);      
     }
     // Terminate the connection process.
     this.connection_to_make = null;
@@ -1559,8 +1572,6 @@ class Controller {
     this.disableButtons(edit_btns);
     if(MODEL.selection.length > 0) this.enableButtons('clone delete');
     if(this.canPaste) this.enableButtons('paste');
-    // Only allow solving when events can occur.
-    if(MODEL.hasTargets) this.enableButtons('solve');
     var u = UNDO_STACK.canUndo;
     if(u) {
       this.enableButtons('undo');
@@ -1666,13 +1677,14 @@ class Controller {
 
   mouseMove(e) {
     // Responds to mouse cursor moving over CLAST diagram area.
+    // NOTE: Updating the cursor position clears all "on ..." properties.
     this.updateCursorPosition(e);
     
     // NOTE: check, as MODEL might still be undefined
     if(!MODEL) return;
-    
-    //console.log(e);
+
     const fc = MODEL.focal_cluster;
+    // Link under cursor is set by the event handler of SVG link shapes.
     if(fc.relatedLinks.indexOf(this.link_under_cursor) >= 0) {
       this.on_link = this.link_under_cursor;
     }
@@ -1686,13 +1698,13 @@ class Controller {
     }
     for(let i = fc.sub_clusters.length-1; i >= 0; i--) {
       const c = fc.sub_clusters[i];
-      // NOTE: Ignore cluster that is being dragged, so that a cluster
-      // it is being dragged over will be detected instead.
-      if(c != this.dragged_node &&
-          c.containsPoint(this.mouse_x, this.mouse_y)) {
-        this.on_node = c;
-        this.on_cluster = c;
-        break;
+      // NOTE: Cursor may be over multiple clusters when dragging a selection.
+      // Then keep the target cluster, not the cluster being dragged.
+      if(c.containsPoint(this.mouse_x, this.mouse_y)) {
+        if(!this.on_cluster || c !== this.dragged_node) {
+          this.on_node = c;
+          this.on_cluster = c;
+        }
       }
     }
     // Unset and redraw target cluster if cursor no longer over it.
@@ -1737,7 +1749,7 @@ class Controller {
     // When dragging selection that contains a factor or cluster, change
     // cursor to indicate that selected nodes will be moved into the target.
     if(this.dragged_node) {
-      if(this.on_cluster) {
+      if(this.on_cluster && this.dragged_node !== this.on_cluster) {
         cr = 'cell';
         this.target_cluster = this.on_cluster;
         // Redraw the target cluster so it will appear on top (and
@@ -1831,6 +1843,9 @@ class Controller {
               md.element('text').value = '';
               md.show('text');
             });
+      } else if(type === 'link') {
+        // Mouse down Assume that modeler no longer wants to add links.
+        if(this.canLink()) this.canLink(true);        
       }
       return;
     }
@@ -1867,7 +1882,8 @@ class Controller {
       }
       // Pass dragged node for UNDO.
       UNDO_STACK.push('move', this.dragged_node, true);
-    } else { 
+    } else {
+      // Assume that modeler starts dragging a selection rectangle.
       this.dragged_node = null;
       this.start_sel_x = this.mouse_x;
       this.start_sel_y = this.mouse_y;
@@ -1884,7 +1900,7 @@ class Controller {
     this.mouse_up_y = cp[1];
     // First check whether user is selecting a rectangle.
     if(this.start_sel_x >= 0 && this.start_sel_y >= 0) {
-      // Clear previous selection unless user is adding to it (by still
+     // Clear previous selection unless user is adding to it (by still
       // holding SHIFT button down).
       if(!e.shiftKey) MODEL.clearSelection();
       // Compute defining points of rectangle (top left and bottom right).
@@ -3207,18 +3223,18 @@ console.log('HERE name conflicts', name_conflicts, mapping);
   showLinkPropertiesDialog() {
     // Show the edit link properties modal.
     if(!(this.on_link && this.on_link instanceof Link)) return;
+    this.hideMultiplierMenu();
     const
         md = this.modals['edit-link'],
         link = this.on_link,
         ln = md.element('name'),
         icon = md.element('icon'),
-        lm = md.element('multiplier'),
-        eb = md.element('edit'),
+        type = md.element('type'),
+        ebtn = md.element('edit'),
         x = link.expression;
     this.edited_object = this.on_link;
     ln.innerText = link.displayName;
-    lm.value = x.text;
-    eb.title = x.text;
+    type.title = x.text;
     let ic = 'undefined';
     if(x.defined) {
       if(x.isStatic) {
@@ -3231,23 +3247,65 @@ console.log('HERE name conflicts', name_conflicts, mapping);
       }
     }
     icon.src = `images/${ic}.png`;
-    icon.title = `(${ic})`;
-    md.show('multiplier');
+    type.innerText = ic;
+    if(ic === 'formula') {
+      ebtn.classList.remove('off');
+    } else {
+      ebtn.classList.add('off');      
+    }
+    md.show();
+  }
+  
+  showMultiplierMenu() {
+    // Show drop-down menu with link multiplier type icons.
+    document.getElementById('edit-link-menu').style.display = 'block';
+  }
+  
+  hideMultiplierMenu() {
+    // Hide drop-down menu with link multiplier type icons.
+    document.getElementById('edit-link-menu').style.display = 'none';
+  }
+  
+  selectMultiplier(event) {
+    // Change the link multiplier icon of the dialog, and show/hide the
+    // edit button that is used only for formula multipliers.
+    this.hideMultiplierMenu();
+    const
+        md = this.modals['edit-link'],
+        icon = md.element('icon'),
+        type = md.element('type'),
+        ebtn = md.element('edit'),
+        src = event.target.src.split('/').pop().replace('.png', '');
+    icon.src = `images/${src}.png`;
+    type.innerText = src;
+    if(src === 'formula') {
+      ebtn.classList.remove('off');
+    } else {
+      ebtn.classList.add('off');      
+    }
   }
   
   updateLink() {
     // Checks whether expression is valid, and if so, updates the link.
-     const
+    const
         md = this.modals['edit-link'],
-        link = this.on_link,
-        ln = md.element('name'),
-        icon = md.element('icon'),
-        lm = md.element('multiplier'),
-        eb = md.element('edit'),
-        x = link.expression;
-   
+        link = this.edited_object;
+    if(link && link instanceof Link) {
+      const
+          type = md.element('type').innerText,
+          x = link.expression;
+      if(type === 'increase') {
+        x.text = '1';
+      } else if(type === 'decrease') {
+        x.text = '-1';
+      } else if(type === 'undefined') {
+        x.text = '';
+      }
+      x.reset();
+    }
     this.edited_object = false;
     md.hide();
+    this.drawObject(link);
   }
   
   cancelEditLink() {
@@ -3258,7 +3316,7 @@ console.log('HERE name conflicts', name_conflicts, mapping);
     if(link instanceof Link) {
       // Restore orgiginal expression text.
       const x = link.expression;
-      x.text = md.element('edit').title;
+      x.text = md.element('type').title;
       x.reset();
     }
     this.edited_object = false;    

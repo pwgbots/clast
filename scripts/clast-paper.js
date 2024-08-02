@@ -364,13 +364,13 @@ class Paper {
     this.addShadowFilter(defs, id, 'rgb(50,120,255)', 2);
     id = 't_a_r_g_e_t__ID*';
     this.target_filter = `filter: url(#${id})`;
-    this.addShadowFilter(defs, id, 'rgb(250,125,0)', 8);
-    id = 'a_c_t_i_v_a_t_e_d__ID*';
-    this.activated_filter = `filter: url(#${id})`;
-    this.addShadowFilter(defs, id, 'rgb(0,255,0)', 12);
-    id = 'a_c_t_i_v_e__l_i_n_k__ID*';
-    this.active_link_filter = `filter: url(#${id}); opacity: 1`;
-    this.addShadowFilter(defs, id, 'rgb(0,255,0)', 10);
+    this.addShadowFilter(defs, id, 'rgb(0,220,144)', 7);
+    id = 'i_n_c_r_e_a_s_e_d__ID*';
+    this.increased_filter = `filter: url(#${id})`;
+    this.addShadowFilter(defs, id, 'rgb(250,125,0)', 5);
+    id = 'd_e_c_r_e_a_s_e_d__ID*';
+    this.decreased_filter = `filter: url(#${id})`;
+    this.addShadowFilter(defs, id, 'rgb(0,180,255)', 5);
     this.svg.appendChild(defs);
     this.changeFont(CONFIGURATION.default_font_name);
     // Dash patterns for highlighting cycles.
@@ -1071,11 +1071,6 @@ class Paper {
         {fill: 'none', stroke: stroke_color, 'stroke-width': stroke_width,
             'stroke-dasharray': sda, 'stroke-linecap': 'round',
             'marker-end': chev, opacity: opac});
-    if(activated) {
-      // Highlight arrow if FROM factor was "activated" in the previous
-      // cycle.
-      tl.setAttribute('style', this.active_link_filter);
-    }
     if(l.expression.defined && (l.expression.isStatic || MODEL.solved)) {
       // When possible, show sign of link multiplier, and also its value
       // if this is not 1 or -1.
@@ -1100,9 +1095,9 @@ class Paper {
             bp = this.bezierPointAtDistanceFromHead(
                 [x1, y1], [fcx, fcy], [tcx, tcy], [x2, y2], 35);
         l.shape.addRect(bp[0], bp[1], bw, bh,
-            {stroke: '#80a0ff', 'stroke-width': 0.5, fill: '#d0f0ff'});
+            {rx: 3, stroke: '#80a0ff', 'stroke-width': 0.5, fill: '#d0f0ff'});
         l.shape.addNumber(bp[0], bp[1], s,
-            {'font-size': 9, 'font-family': 'MPlus', 'font-weight': 'bold',
+            {'font-size': 9, 'font-family': 'MPlus', 'font-weight': 700,
                 'fill': (r <= VM.ERROR || r >= VM.EXCEPTION ?
                     this.palette.VM_error : '#0000a0')});
       }
@@ -1167,7 +1162,7 @@ class Paper {
     if(clstr.hasActor) {
       const
           th = lcnt * this.font_heights[11],
-          anl = UI.stringToLineArray(clstr.actor.name, hw * 0.85, 11),
+          anl = UI.stringToLineArray(clstr.actor.name, w * 0.85, 11),
           format = {'font-size': 11, fill: this.palette.actor_font,
                   'font-style': 'italic'};
       let any = cy + th/2 + 7;
@@ -1207,16 +1202,10 @@ class Paper {
         x = fact.x + dx,
         y = fact.y + dy,
         hw = fact.width / 2,
-        hh = fact.height / 2,
-        active = fact.isActive(MODEL.t);
+        hh = fact.height / 2;
     let stroke_width = 1,
         stroke_color = this.palette.rim,
         fill_color = 'white';
-    // Active states have a dark green rim.
-    if(active) {
-      stroke_width = 1.5;
-      stroke_color = this.palette.active_rim;
-    }
     // Being selected overrules special border properties except SDA
     if(fact.selected) {
       stroke_color = this.palette.select;
@@ -1285,11 +1274,11 @@ class Paper {
         fact.shape.addImage(x - hw + 4, y - 8, 16, 16, `images/${img}.png`);
       }
       if(s) {
-        const te = fact.shape.addText(x, y - hh + 6, r,
-            {'font-size': 9, 'font-family': 'MPlus', 'font-weight': 'bold'});
+        const te = fact.shape.addText(x, y - hh + 6, s,
+            {'font-size': 9, 'font-family': 'MPlus', 'font-weight': 700});
         if(r <= VM.ERROR || r >= VM.EXCEPTION) {
           te.setAttribute('fill', '#c00000');
-          te.setAttribute('font-weight', 'bold');
+          te.setAttribute('font-weight', 700);
         } else {
           te.setAttribute('fill', '#0000c0');
         }
@@ -1297,8 +1286,11 @@ class Paper {
     }
     // Highlight shape if needed.
     let filter = '';
-    if(fact.activated(MODEL.t)) {
-      filter = this.activated_filter;
+    const change = fact.changed(MODEL.t);
+    if(change > 0) {
+      filter = this.increased_filter;
+    } else if(change < 0) {
+      filter = this.decreased_filter;
     } else if(DOCUMENTATION_MANAGER.visible && fact.comments) {
       filter = this.documented_filter;
     }

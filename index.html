@@ -462,18 +462,22 @@ and move the cursor over the status bar">
   <div id="edit-link-modal" class="modal">
     <div id="edit-link-dlg" class="inp-dlg">
       <div class="dlg-title">
-        Multiplier for
+        <em>Link:</em>
         <div id="edit-link-name"></div>
         <img class="cancel-btn" src="images/cancel.png">
         <img class="ok-btn" src="images/ok.png">
       </div>
-      <div id="edit-link-multiplier-lbl">Multiplier:</div>
-      <img id="edit-link-icon" src="images/undefined.png" title="(undefined)">
-      <input id="edit-link-multiplier" type="text"
-             title="Type 1 for &oplus;, or -1 for &ominus;
-0 (or blank) denote &ldquo;undefined&rdquo;"
-             autocomplete="off">
-      <img id="edit-link-edit" src="images/edit.png" class="sbtn enab">
+      <div id="edit-link-lbl">Polarity:</div>
+      <img id="edit-link-icon" src="images/undefined.png">
+      <div id="edit-link-type-div">(<span id="edit-link-type">undefined</span>)</div>
+      <div id="edit-link-menu">
+        <img id="edit-link-inc" class="sbtn enab" src="images/increase.png">
+        <img id="edit-link-dec" class="sbtn enab" src="images/decrease.png">
+        <img id="edit-link-expr" class="sbtn enab" src="images/formula.png">
+        <img id="edit-link-none" class="sbtn enab" src="images/undefined.png">        
+      </div>
+      <img id="edit-link-edit" src="images/edit.png" class="sbtn enab"
+           title="Edit link multiplier expression">
     </div>
   </div>
   

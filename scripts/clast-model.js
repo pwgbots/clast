@@ -419,6 +419,13 @@ class CLASTModel {
   translateGraph(dx, dy) {
     // Move all entities in the focal cluster by (dx, dy) pixels.
     if(!dx && !dy) return;
+    // Keep track of time last translated to prevent ultrafast movement.
+    const
+        now = Date.now(),
+        dt = now - this.last_translation;
+    if(dt < 100) return;
+    this.last_translation = now;
+    
     const fc = this.focal_cluster;
     for(let i = 0; i < fc.factors.length; i++) {
       fc.factors[i].x += dx;
@@ -460,14 +467,14 @@ class CLASTModel {
   }
 
   selectList(ol) {
-    // Set selection to elements in `ol`
-    // NOTE: first clear present selection without redrawing
+    // Set selection to elements in `ol`.
+    // NOTE: First clear present selection without redrawing.
     this.clearSelection(false);
     for(let i = 0; i < ol.length; i++) {
       ol[i].selected = true;
       if(this.selection.indexOf(ol[i]) < 0) this.selection.push(ol[i]);
     }
-    // NOTE: does not redraw the graph -- the calling routine should do that
+    // NOTE: Does not redraw the graph -- the calling routine should do that.
   }
   
   get getSelectionPositions() {
@@ -482,7 +489,7 @@ class CLASTModel {
 
   setSelectionPositions(pl) {
     // Set position of selected nodes to the [X, Y] passed in the list.
-    // NOTE: iterate backwards over the selection ...
+    // NOTE: Iterate backwards over the selection ...
     for(let i = this.selection.length - 1; i >= 0; i--) {
       let obj = this.selection[i];
       if(obj instanceof Factor || obj instanceof Cluster) {
@@ -2207,10 +2214,14 @@ class Factor extends NodeBox {
     return s !== VM.UNDEFINED && s !== 0;
   }
 
-  activated(t) {
-    if(!MODEL.solved) return false;
+  changed(t) {
+    if(!MODEL.solved) return 0;
     const s = (t < 0 ? VM.UNDEFINED : this.status[t]);
-    return s !== VM.UNDEFINED && s !== 0 && (t <= 0 || s !== this.status[t - 1]);
+    if(s !== VM.UNDEFINED) {
+      if(t <= 0) return Math.sign(s);
+      return Math.sign(s - this.status[t - 1]);
+    }
+    return 0;
   }
   
   updateStatus(t) {
@@ -2242,7 +2253,6 @@ class Factor extends NodeBox {
               s += Math.sign(r * fr);
             }
           }
-console.log('HERE r s', r, s, l.displayName);
         }
       }
       // Normalize result to either -1, 0 or +1.
@@ -2250,6 +2260,17 @@ console.log('HERE r s', r, s, l.displayName);
     }
     // Update the status vector for time step `t`.
     this.status[t] = s;
+  }
+  
+  get variablesInScope() {
+    // Returns a list of names of all variables within scope of this factor.
+    const
+        fis = this.inputs,
+        list = [];
+    for(let i = 0; i < fis.length; i++) {
+      list.push(fis[i], fis[i].from_factor);
+    }
+    return list.sort();
   }
 
 } // END of class Factor
@@ -2370,4 +2391,10 @@ class Link {
     return f_in && t_in;
   }
   
+  get variablesInScope() {
+    // Returns a list of names of all variables within scope of this link.
+    // NOTE: This will always be only the FROM factor.
+    return [this.from_factor];
+  }
+
 } // END of class Link

@@ -1269,14 +1269,15 @@ class VirtualMachine {
       const s = this.sequence[k];
       for(let i = 0; i < s.length; i++) {
         s[i].updateStatus(VM.t);
-        changes.push(`"${s[i].displayName} has state ` +
+        changes.push(`"${s[i].displayName}" \u2192 ` +
             VM.sig4Dig(s[i].status[VM.t]));
       }
     }
-    this.logMessage(this.t, pluralS(changes.length, 'factor') + ' updated:');
+    this.logMessage(this.t, pluralS(changes.length, 'factor') + ' changed state:');
     if(changes.length) {
-      changes.sort();
-      this.logMessage(this.t, '- ' + changes.join('\n- '));
+      for(let i = 0; i < changes.length; i++) {
+        this.logMessage(this.t, ((i + 1) + ': ').padStart(5) + changes[i]);
+      }
     }
     MONITOR.updateDialog();
     MONITOR.updateMonitorTime();
@@ -1378,6 +1379,13 @@ function VMI_push_time_step(x) {
   const t = x.step[x.step.length - 1]; 
   if(DEBUGGING) console.log('push time step number t = ' + t);
   x.push(t);
+}
+
+function VMI_push_delta_t(x) {
+  // Push the duration of 1 time step (in hours).
+  const dt = MODEL.time_scale * VM.time_unit_values[MODEL.time_unit]; 
+  if(DEBUGGING) console.log('push delta-t = ' + dt);
+  x.push(dt);
 }
 
 function VMI_push_clock_time(x) {
@@ -1537,10 +1545,7 @@ function VMI_push_var(x, args) {
   // beyond the optimization period is evaluated as its last time step
   // UNLESS t is used in a self-referencing variable.
   const xv = obj.hasOwnProperty('xv');
-  if(!xv) {
-    t = Math.max(0, Math.min(
-        MODEL.end_period - MODEL.start_period + MODEL.look_ahead + 1, t));
-  }
+  if(!xv) t = Math.max(0, Math.min(MODEL.run_length, t));
   // Trace only now that time step t has been computed.
   if(DEBUGGING) {
     console.log('push var:', (xv ? '[SELF]' :
@@ -1549,6 +1554,9 @@ function VMI_push_var(x, args) {
   }
   if(obj instanceof Expression) {
     x.push(obj.result(t));
+  } else if(xv) {
+    // Variable references an earlier value computed for this expression `x`.
+    x.push(t >= 0 && t < x.vector.length ? x.vector[t] : obj.dv);
   } else if(typeof obj === 'number') {
     // Object is a number.
     x.push(obj);
@@ -2309,13 +2317,13 @@ const
   SEPARATOR_CHARS = PARENTHESES + OPERATOR_CHARS + "[ '",
   COMPOUND_OPERATORS = ['!=', '<>', '>=', '<='],
   CONSTANT_SYMBOLS = [
-      't', 'now',
+      't', 'dt', 'now',
       'random', 'true', 'false',
       'pi', 'infinity', '#',
       'yr', 'wk', 'd', 'h',
       'm', 's'],
   CONSTANT_CODES = [
-      VMI_push_time_step, VMI_push_clock_time,
+      VMI_push_time_step, VMI_push_delta_t, VMI_push_clock_time,
       VMI_push_random, VMI_push_true, VMI_push_false,
       VMI_push_pi, VMI_push_infinity, VMI_push_contextual_number,
       VMI_push_year, VMI_push_week, VMI_push_day, VMI_push_hour,
