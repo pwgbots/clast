@@ -1195,6 +1195,73 @@ class CLASTModel {
     }
   }
   
+  get factorCategories() {
+    // Return object {action, context, outcome} where each property is a list
+    // of factors belonging to that category.
+    // @@OPTION: ignore actors that have not been checked in the actor list.
+    const fc = {action: [], context: [], outcome: []};
+    for(let k in this.factors) if(this.factors.hasOwnProperty(k)) {
+      const f = this.factors[k];
+      if(f.inputs.length) {
+        if(f.outputs.length) {
+          // "Internal" factors (i.e., having both inputs and outputs) are
+          // considered an outcome of interest if they are "owned" by an actor.
+          if(f.hasActor) fc.outcome.push(k);
+        } else {
+          // When not "owned", it must still be an outcome of interest or it
+          // should not be part of the model. 
+          fc.outcome.push(f);
+        }
+      } else {
+        // No incoming links => action if "owned" by an actor, otherwise context.
+        if(f.hasActor) {
+          fc.action.push(f);
+        } else {
+          fc.context.push(f);
+        }
+      }
+    }
+    console.log('HERE fc', fc);
+    return fc;
+  }
+  
+  pathImpact(p, f) {
+    // Return multiplier product for links on path `p` from start to factor `f`.
+  }
+  
+  impactTable(type=1) {
+    // Type 1: actions => outcomes, type 2: context => outcomes; type 3: combined.
+    this.buildPathMatrix();
+    const
+        fc = this.factorCategories,
+        tbl = {};
+    if(type % 2 === 1) {
+      for(let i = 0; i < fc.action.length; i++) {
+        const
+            pl = this.path_matrix[fc.identifier],
+            impacts = [];
+        for(let j = 0; j < fc.outcome.lengh; j++) {
+          const o = fc.outcome[j];
+          for(let pi = 0; pi < pl.length; pi ++) {
+            const op = pl[pi].indexOf(o);
+            if(op < 0) {
+              impacts.push(0);
+            } else {
+              // Calculate and push link multiplier result.
+              impacts.push(this.pathImpact(pl[pi], o));
+            }
+          }
+        }
+      }
+    }
+    if(type > 1) {
+      for(let i = 0; i < fc.context.length; i++) {
+        
+      }
+    }
+    return tbl;
+  }
+  
 } // END of class CLASTModel
 
 

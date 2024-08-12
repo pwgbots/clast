@@ -266,6 +266,21 @@ class Paper {
     return this.svg.outerHTML.replaceAll(' opacity="0.9"', ' opacity="1"');
   }
   
+  get svgWithFonts() {
+    // Return SVG string with embedded fonts used by CLAST.
+    const style = ['<style>'];
+    for(let k in BASE64_FONTS) if(BASE64_FONTS.hasOwnProperty(k)) {
+      const
+          b64 = BASE64_FONTS[k].replace(/(\r\n|\n|\r)/gm, ''),
+          ff = k.replace('Bold', ''),
+          bf = (ff === k ? '' : 'font-weight: bold;');
+      style.push('@font-face {font-family: "', ff, '";', bf,
+          'src: url(data:application/octet-stream;base64,', b64, ');}');
+    }
+    style.push('</style>');
+    return this.opaqueSVG.replace('<defs>', '<defs>' + style.join(''));
+  }
+  
   clear() {
     // First, clear the entire SVG
     this.clearSVGElement(this.svg);
@@ -396,7 +411,7 @@ class Paper {
     const el = document.createElementNS(this.svg_url, type);
     if(!el) throw UI.ERROR.CREATE_FAILED;
     // NOTE: by default, SVG elements should not respond to any mouse events!
-    el.setAttribute('pointer-events', 'none');
+    if(type !== 'defs') el.setAttribute('pointer-events', 'none');
     return el;
   }
   

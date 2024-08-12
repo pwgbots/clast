@@ -339,8 +339,6 @@ class Controller {
     return VM.sig2Dig(n) + ' ' + 'kMGTP'.charAt(m) + 'B';
   }
   
-  // Shapes are only used to draw model diagrams.
-  
   createShape(mdl) {
     if(this.paper) return new Shape(mdl);
     return null;
@@ -618,7 +616,7 @@ class Controller {
     this.buttons.save.addEventListener('click',
         () => FILE_MANAGER.saveModel(event.shiftKey));
     this.buttons.savediagram.addEventListener('click',
-        () => FILE_MANAGER.saveDiagramAsSVG(event.shiftKey));
+        () => FILE_MANAGER.saveDiagramAsSVG(event));
     this.buttons.actors.addEventListener('click',
         () => ACTOR_MANAGER.showDialog());
     // NOTE: All draggable & resizable dialogs "toggle" show/hide.

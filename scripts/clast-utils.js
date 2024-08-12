@@ -29,25 +29,6 @@ SOFTWARE.
 */
 
 //
-// Functions that facilitate HTTP requests
-//
-
-function postData(obj) {
-  // Converts a JavaScript object to an object that can be passed to a server
-  // in a POST request
-  const fields = [];
-  for(let k in obj) if(obj.hasOwnProperty(k)) {
-    fields.push(encodeURIComponent(k) + "=" + encodeURIComponent(obj[k]));
-  }
-  return {
-      method: 'post',
-      headers: {'Content-Type': 'application/x-www-form-urlencoded'},
-      mode: 'no-cors',
-      body: fields.join('&')
-    };
-}
-
-//
 // Functions that convert numbers to strings, or strings to numbers
 //
 

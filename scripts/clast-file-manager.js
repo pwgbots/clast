@@ -144,9 +144,9 @@ class FileManager {
     }
   }
   
-  saveDiagramAsSVG(tight) {
+  saveDiagramAsSVG(event) {
     // Output SVG as string with nodes and arrows 100% opaque.
-    if(tight) {
+    if(event.shiftKey) {
       // First align to grid and then fit to size.
       MODEL.alignToGrid();      
       UI.paper.fitToSize(1);
@@ -154,16 +154,41 @@ class FileManager {
       UI.paper.fitToSize();
       MODEL.alignToGrid();      
     }
-    this.pushOutSVG(UI.paper.opaqueSVG);
+    if(event.altKey) {
+      const
+          svg = UI.paper.svgWithFonts,
+          uri = 'data:image/svg+xml;base64,' + window.btoa(svg),
+          img = new Image();
+      img.onload = () => {
+          const
+              cvs = document.createElement('canvas'),
+              ctx = cvs.getContext('2d');
+          cvs.width = img.width * 4;
+          cvs.height = img.height * 4;
+          ctx.scale(4, 4);
+          ctx.drawImage(img, 0, 0);
+          cvs.toBlob(blob => {
+              const
+                  e = document.getElementById('svg-saver'),
+                  url = URL.createObjectURL(blob);
+              e.setAttribute('href', url);
+              e.click();
+            });
+      };
+      img.src = uri;
+    } else {
+      this.pushOutSVG(UI.paper.svgWithFonts); //opaqueSVG
+    }
   }
   
   pushOutSVG(svg) {
-    const blob = new Blob([svg], {'type': 'image/svg+xml'});
-    const e = document.getElementById('svg-saver');
-    e.download = 'model.svg';
+    const
+        blob = new Blob([svg], {'type': 'image/svg+xml'}),
+        e = document.getElementById('svg-saver');
+    e.download = 'clast-model.svg';
     e.type = 'image/svg+xml';
     e.href = (window.URL || webkitURL).createObjectURL(blob);
     e.click();
-  }  
- 
+  }
+   
 } // END of class FileManager
