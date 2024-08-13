@@ -155,6 +155,8 @@ class FileManager {
       MODEL.alignToGrid();      
     }
     if(event.altKey) {
+      this.pushOutSVG(UI.paper.svgWithFonts);
+    } else {
       const
           svg = UI.paper.svgWithFonts,
           uri = 'data:image/svg+xml;base64,' + window.btoa(svg),
@@ -170,22 +172,28 @@ class FileManager {
           cvs.toBlob(blob => {
               const
                   e = document.getElementById('svg-saver'),
-                  url = URL.createObjectURL(blob);
-              e.setAttribute('href', url);
+                  url = (window.URL || webkitURL).createObjectURL(blob),
+                  name = fileName(MODEL.focal_cluster.parent ?
+                      MODEL.focal_cluster.displayName : MODEL.name) ||
+                  'CLAST-model';
+              e.download = name + '.png';
+              e.type = 'image/png';
+              e.href = url;
               e.click();
             });
       };
       img.src = uri;
-    } else {
-      this.pushOutSVG(UI.paper.svgWithFonts); //opaqueSVG
     }
   }
   
   pushOutSVG(svg) {
     const
         blob = new Blob([svg], {'type': 'image/svg+xml'}),
-        e = document.getElementById('svg-saver');
-    e.download = 'clast-model.svg';
+        e = document.getElementById('svg-saver'),
+        name = fileName(MODEL.focal_cluster.cluster ?
+            MODEL.focal_cluster.displayName : MODEL.name) ||
+        'CLAST-model';
+    e.download = name + '.svg';
     e.type = 'image/svg+xml';
     e.href = (window.URL || webkitURL).createObjectURL(blob);
     e.click();

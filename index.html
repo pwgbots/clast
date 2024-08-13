@@ -96,8 +96,8 @@ SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
         loadScripts(['-config', '-model', '-paper', '-controller',
             '-monitor', '-expression-editor', '-file-manager',
             '-model-autosaver', '-documentation-manager',
-            '-actor-manager', '-finder', '-undo-redo', '-vm', '-utils'],
-                  t);
+            '-actor-manager', '-finder', '-undo-redo', '-vm',
+            '-utils', '-fonts'], t);
       }
     }
 
@@ -163,13 +163,15 @@ SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
       <img id="finder-btn" class="btn enab" src="images/find.png"
            title="Find model elements by their name (Ctrl-F)">
       <img id="savediagram-btn" class="btn enab" src="images/save-diagram.png"
-           title="Download diagram as Scalable Vector Graphics (Ctrl-G)">
+           title="Download diagram as PNG bitmap image (Ctrl-G)
+Alt-click (or press Ctrl-Alt-G) to download as vector graphics (SVG)">
       <img id="monitor-btn" class="btn enab" src="images/monitor.png"
            title="View simulation monitor (Ctrl-M)">
       <img id="documentation-btn" class="btn enab" src="images/info.png"
            title="View information and documentation (Ctrl-I)">
       <img id="cycle-btn" class="btn enab" src="images/cycle.png"
-           title="Highlight next loop (if any)">
+           title="Highlight next loop (if any)
+Alt-click to highlight all loops, and again to cancel highlighting">
     </div>
     <!-- if diagram is not the TOP cluster, show a button to move up to its parent -->
     <div id="focal-cluster">

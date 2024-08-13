@@ -190,7 +190,6 @@ class Controller {
       'L': 'load',
       'M': 'monitor', // Alt-M will open the model settings dialog
       // Ctrl-N will still open a new browser window.
-      'P': 'diagram', // P for PNG (Portable Network Graphics image)
       'Q': 'stop',
       'R': 'solve', // runs the simulation
       'S': 'save',
@@ -2121,11 +2120,6 @@ class Controller {
       } else if(code === 'Insert') {
         // Toggle the "linking" state.
         this.canLink(true);
-      } else if(e.ctrlKey && code === 'KeyS') {
-        // Ctrl-S means: save model. Treat separately because Shift-key
-        // alters the way in which the model file is saved.
-        e.preventDefault();
-        FILE_MANAGER.saveModel(e.shiftKey);
       } else if(alt && ['KeyC', 'KeyM'].indexOf(code) >= 0) {
         // Special shortcut keys for "clone selection" and "model settings".
         const be = new Event('click');

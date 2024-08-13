@@ -156,6 +156,11 @@ function capitalized(s) {
   return s.charAt(0).toUpperCase() + s.slice(1);
 }
 
+function fileName(s) {
+  // Return string `s` as a file name that can be used cross-platform.
+  return s.replace(/[^A-Za-z0-9]+/g, '-');
+}
+
 function ellipsedText(text, n=50, m=10) {
   // Returns `text` with ellipsis " ... " between its first `n` and
   // last `m` characters. 
